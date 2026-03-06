@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f0f0f">
+<title>Spend Log</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #2e2e2e;
+    --text: #f0ede8;
+    --muted: #6a6662;
+    --accent: #e8d5a3;
+    --accent2: #c8b483;
+    --danger: #e87a6a;
+    --food: #7ec8a4;
+    --shopping: #7ab4e8;
+    --entertainment: #e8b47a;
+    --other: #a0a0a0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body { height: 100%; overscroll-behavior: none; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.55rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--accent);
+  }
+
+  header .date {
+    font-size: 0.58rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-align: right;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .tab {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    padding: 14px 8px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Scrollable content ── */
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 16px 220px;
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Total pill ── */
+  .total-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .total-pill .lbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted); }
+  .total-pill .amt { font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
+
+  /* ── Section label ── */
+  .slabel {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    margin-bottom: 8px;
+    margin-top: 16px;
+  }
+  .slabel:first-child { margin-top: 0; }
+
+  /* ── Transactions ── */
+  .tx-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .tx-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    min-height: 60px;
+    animation: slideIn 0.18s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .cat-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .cat-dot[data-cat="food"]          { background: var(--food); }
+  .cat-dot[data-cat="shopping"]      { background: var(--shopping); }
+  .cat-dot[data-cat="entertainment"] { background: var(--entertainment); }
+  .cat-dot[data-cat="other"]         { background: var(--other); }
+
+  .tx-body { flex: 1; min-width: 0; }
+  .tx-desc { font-size: 0.85rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-meta { font-size: 0.6rem; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .tx-amt  { font-size: 1rem; color: var(--accent); font-weight: 500; white-space: nowrap; }
+
+  .tx-del {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 1.3rem; line-height: 1;
+    min-width: 40px; min-height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    transition: color 0.12s;
+    border-radius: 8px;
+  }
+  .tx-del:active { color: var(--danger); background: #2a1818; }
+
+  /* ── Subtotals ── */
+  .sub-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .sub-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sub-row:last-child { border-bottom: none; }
+  .sub-cat { flex: 1; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .sub-amt { font-size: 1rem; color: var(--text); }
+
+  /* ── Export ── */
+  .export-hint { font-size: 0.62rem; color: var(--muted); line-height: 1.7; margin-bottom: 12px; }
+  .export-hint span { color: var(--accent); }
+
+  .export-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.66rem;
+    line-height: 1.7;
+    padding: 14px 16px;
+    white-space: pre;
+    overflow-x: auto;
+    margin-bottom: 14px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .outline-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    padding: 15px 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    min-height: 54px;
+    transition: all 0.12s;
+  }
+  .outline-btn:active { border-color: var(--accent); color: var(--accent); }
+
+  .copy-main {
+    grid-column: 1 / -1;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0f0f0f;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+    min-height: 58px;
+  }
+  .copy-main:active { background: var(--accent2); border-color: var(--accent2); color: #0f0f0f; }
+
+  .danger-btn { color: #7a3a3a; border-color: #3a2020; }
+  .danger-btn:active { color: var(--danger) !important; border-color: var(--danger) !important; }
+
+  /* ── Empty ── */
+  .empty { color: var(--muted); font-size: 0.75rem; text-align: center; padding: 30px 20px; }
+
+  /* ── Fixed entry bar at bottom ── */
+  .entry-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    z-index: 100;
+  }
+
+  .entry-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .amt-wrap { position: relative; width: 115px; flex-shrink: 0; }
+  .amt-wrap .sym {
+    position: absolute; left: 12px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent2); font-size: 1rem; pointer-events: none;
+  }
+
+  input[type="number"], input[type="text"] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 16px; /* prevents iOS auto-zoom */
+    padding: 14px 12px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+    min-height: 52px;
+  }
+
+  input[type="number"] { padding-left: 26px; }
+  input:focus { border-color: var(--accent2); }
+  input::placeholder { color: var(--muted); }
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+  .cat-strip {
+    display: flex; gap: 8px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 2px;
+  }
+  .cat-strip::-webkit-scrollbar { display: none; }
+
+  .cat-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    padding: 10px 18px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-height: 42px;
+    transition: all 0.12s;
+  }
+
+  .cat-btn.active { border-color: transparent; color: #0f0f0f; font-weight: 500; }
+  .cat-btn[data-cat="food"].active          { background: var(--food); }
+  .cat-btn[data-cat="shopping"].active      { background: var(--shopping); }
+  .cat-btn[data-cat="entertainment"].active { background: var(--entertainment); }
+  .cat-btn[data-cat="other"].active         { background: var(--other); }
+
+  .add-btn {
+    background: var(--accent);
+    border: none; border-radius: 10px;
+    color: #0f0f0f;
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-size: 1.4rem; font-weight: 800;
+    min-height: 52px; width: 56px;
+    flex-shrink: 0;
+    transition: background 0.12s;
+  }
+  .add-btn:active { background: var(--accent2); }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25%      { transform: translateX(-6px); }
+    75%      { transform: translateX(6px); }
+  }
+  .shake { animation: shake 0.3s ease; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SPEND LOG</h1>
+  <div class="date" id="dateDisplay"></div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('log', this)">Log</button>
+  <button class="tab" onclick="switchTab('breakdown', this)">Breakdown</button>
+  <button class="tab" onclick="switchTab('export', this)">Export</button>
+</div>
+
+<div class="tab-content">
+
+  <div class="tab-panel active" id="tab-log">
+    <div class="total-pill">
+      <div class="lbl">Today's total</div>
+      <div class="amt" id="totalDisplay">£0.00</div>
+    </div>
+    <div class="slabel">Transactions</div>
+    <div class="tx-list" id="txList">
+      <div class="empty">No transactions yet — add one below.</div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-breakdown">
+    <div class="total-pill">
+      <div class="lbl">Today's total</div>
+      <div class="amt" id="totalDisplay2">£0.00</div>
+    </div>
+    <div class="slabel">By category</div>
+    <div class="sub-card" id="subtotals">
+      <div class="empty">Nothing logged yet.</div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-export">
+    <div class="export-hint">
+      Columns match your sheet: <span>Food · Shopping · Entertainment · Other</span><br>
+      Tap <span>Copy sheet row</span>, open your spreadsheet, click the correct date row's Food cell, and paste.
+    </div>
+    <div class="export-box" id="exportBox">Log transactions to generate your row.</div>
+    <div class="btn-grid">
+      <button class="outline-btn copy-main" onclick="copySheetRow()">📋 Copy sheet row</button>
+      <button class="outline-btn" onclick="downloadCSV()">Download CSV</button>
+      <button class="outline-btn danger-btn" onclick="clearDay()">Clear day</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="entry-bar">
+  <div class="entry-row">
+    <div class="amt-wrap">
+      <span class="sym">£</span>
+      <input type="number" id="amountInput" inputmode="decimal" placeholder="0.00" step="0.01" min="0">
+    </div>
+    <input type="text" id="descInput" placeholder="Description (optional)" style="flex:1">
+    <button class="add-btn" onclick="addTransaction()">+</button>
+  </div>
+  <div class="cat-strip" id="categoryBtns"></div>
+</div>
+
+<script>
+const CATEGORIES = ['food','shopping','entertainment','other'];
+const CAT_LABELS = { food:'Food', shopping:'Shopping', entertainment:'Entertainment', other:'Other' };
+let selectedCat = 'food';
+let transactions = [];
+
+function init() {
+  document.getElementById('dateDisplay').textContent =
+    new Date().toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'2-digit' }).toUpperCase();
+
+  const strip = document.getElementById('categoryBtns');
+  CATEGORIES.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn' + (cat === selectedCat ? ' active' : '');
+    btn.dataset.cat = cat;
+    btn.textContent = CAT_LABELS[cat];
+    btn.onclick = () => selectCat(cat);
+    strip.appendChild(btn);
+  });
+
+  const saved = localStorage.getItem('spendlog_' + todayKey());
+  if (saved) { transactions = JSON.parse(saved); render(); }
+
+  document.getElementById('amountInput').addEventListener('keydown', e => { if(e.key==='Enter') addTransaction(); });
+  document.getElementById('descInput').addEventListener('keydown', e => { if(e.key==='Enter') addTransaction(); });
+}
+
+function todayKey() { return new Date().toISOString().slice(0,10); }
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function selectCat(cat) {
+  selectedCat = cat;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+}
+
+function addTransaction() {
+  const amtRaw = parseFloat(document.getElementById('amountInput').value);
+  if (!amtRaw || amtRaw <= 0) {
+    const inp = document.getElementById('amountInput');
+    inp.classList.add('shake');
+    inp.style.borderColor = 'var(--danger)';
+    setTimeout(() => { inp.classList.remove('shake'); inp.style.borderColor = ''; }, 400);
+    return;
+  }
+  const desc = document.getElementById('descInput').value.trim() || '—';
+  transactions.unshift({ id: Date.now(), amount: amtRaw, desc, cat: selectedCat,
+    time: new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) });
+  save(); render();
+  document.getElementById('amountInput').value = '';
+  document.getElementById('descInput').value = '';
+  document.getElementById('amountInput').focus();
+}
+
+function deleteTransaction(id) {
+  if (!confirm('Remove this transaction?')) return;
+  transactions = transactions.filter(t => t.id !== id);
+  save(); render();
+}
+
+function save() { localStorage.setItem('spendlog_' + todayKey(), JSON.stringify(transactions)); }
+function getTotal() { return transactions.reduce((s,t) => s + t.amount, 0); }
+
+function getSubtotals() {
+  const subs = {};
+  CATEGORIES.forEach(c => subs[c] = 0);
+  transactions.forEach(t => { subs[t.cat] += t.amount; });
+  return subs;
+}
+
+function fmtNum(n) { return n > 0 ? (-n).toFixed(2) : ''; }
+function fmt(n)    { return '£' + n.toFixed(2); }
+function esc(s)    { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function render() {
+  const total = getTotal();
+  document.getElementById('totalDisplay').textContent  = fmt(total);
+  document.getElementById('totalDisplay2').textContent = fmt(total);
+
+  const list = document.getElementById('txList');
+  list.innerHTML = transactions.length === 0
+    ? '<div class="empty">No transactions yet — add one below.</div>'
+    : transactions.map(t => `
+        <div class="tx-item">
+          <div class="cat-dot" data-cat="${t.cat}"></div>
+          <div class="tx-body">
+            <div class="tx-desc">${esc(t.desc)}</div>
+            <div class="tx-meta">${CAT_LABELS[t.cat]} · ${t.time}</div>
+          </div>
+          <div class="tx-amt">${fmt(t.amount)}</div>
+          <button class="tx-del" onclick="deleteTransaction(${t.id})">×</button>
+        </div>`).join('');
+
+  const subs = getSubtotals();
+  const activeCats = CATEGORIES.filter(c => subs[c] > 0);
+  document.getElementById('subtotals').innerHTML = activeCats.length === 0
+    ? '<div class="empty">Nothing logged yet.</div>'
+    : activeCats.map(cat => `
+        <div class="sub-row">
+          <div class="cat-dot" data-cat="${cat}"></div>
+          <div class="sub-cat">${CAT_LABELS[cat]}</div>
+          <div class="sub-amt">${fmt(subs[cat])}</div>
+        </div>`).join('');
+
+  const food = fmtNum(subs['food']), shopping = fmtNum(subs['shopping']);
+  const entertainment = fmtNum(subs['entertainment']), other = fmtNum(subs['other']);
+
+  let box = transactions.length === 0 ? 'Log transactions to generate your row.' :
+    `SHEET ROW (tab-separated):\nFood\tShopping\tEntertainment\tOther\n${food}\t${shopping}\t${entertainment}\t${other}\n\n` +
+    `─────────────────────────\n` +
+    activeCats.map(c => `  ${CAT_LABELS[c].padEnd(16)}${fmt(subs[c])}`).join('\n') +
+    `\n  ${'TOTAL'.padEnd(16)}${fmt(total)}\n\nTransactions (${transactions.length}):\n` +
+    [...transactions].reverse().map(t => `  ${t.time}  ${CAT_LABELS[t.cat].padEnd(16)}${fmt(t.amount)}  ${t.desc}`).join('\n');
+
+  document.getElementById('exportBox').textContent = box;
+}
+
+function copySheetRow() {
+  const subs = getSubtotals();
+  const row = [fmtNum(subs['food']), fmtNum(subs['shopping']),
+               fmtNum(subs['entertainment']), fmtNum(subs['other'])].join('\t');
+  navigator.clipboard.writeText(row).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 1800);
+  });
+}
+
+function downloadCSV() {
+  const dateStr = new Date().toLocaleDateString('en-GB');
+  const subs = getSubtotals();
+  const rows = [
+    ['Date','Time','Category','Description','Amount'],
+    ...[...transactions].reverse().map(t => [dateStr, t.time, CAT_LABELS[t.cat], t.desc, (-t.amount).toFixed(2)]),
+    [],
+    ['--- DAILY SUMMARY ---'],
+    ['Date','Food','Shopping','Entertainment','Other'],
+    [dateStr, fmtNum(subs['food']), fmtNum(subs['shopping']), fmtNum(subs['entertainment']), fmtNum(subs['other'])]
+  ];
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = `spend-${todayKey()}.csv`;
+  a.click();
+}
+
+function clearDay() {
+  if (!confirm('Clear all transactions for today?')) return;
+  transactions = []; save(); render();
+}
+
+init();
+</script>
+</body>
+</html>
