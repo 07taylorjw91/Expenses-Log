@@ -8,6 +8,9 @@
 <meta name="theme-color" content="#0f0f0f">
 <title>Spend Log</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+
+<!-- Firebase SDKs (compat version — no bundler needed) -->
+
 <style>
   :root {
     --bg: #0f0f0f;
@@ -72,10 +75,11 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
-  .sync-status.idle    { color: var(--muted); }
-  .sync-status.sending { color: var(--accent); }
-  .sync-status.ok      { color: var(--success); }
-  .sync-status.error   { color: var(--danger); }
+  .sync-status.idle     { color: var(--muted); }
+  .sync-status.syncing  { color: var(--accent); }
+  .sync-status.ok       { color: var(--success); }
+  .sync-status.offline  { color: var(--danger); }
+  .sync-status.error    { color: var(--danger); }
 
   /* ── Tabs ── */
   .tabs {
@@ -135,10 +139,10 @@
     padding: 12px 16px;
     display: none;
   }
-  .send-banner.visible { display: block; }
-  .send-banner.sending { background: #1e1c14; border: 1px solid var(--accent); color: var(--accent); }
-  .send-banner.ok      { background: #131e18; border: 1px solid var(--success); color: var(--success); }
-  .send-banner.error   { background: #1e1313; border: 1px solid var(--danger); color: var(--danger); }
+  .send-banner.visible  { display: block; }
+  .send-banner.sending  { background: #1e1c14; border: 1px solid var(--accent);  color: var(--accent); }
+  .send-banner.ok       { background: #131e18; border: 1px solid var(--success); color: var(--success); }
+  .send-banner.error    { background: #1e1313; border: 1px solid var(--danger);  color: var(--danger); }
 
   /* ── Section label ── */
   .slabel {
@@ -181,6 +185,10 @@
   .tx-desc { font-size: 0.85rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tx-meta { font-size: 0.6rem; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
   .tx-amt  { font-size: 1rem; color: var(--accent); font-weight: 500; white-space: nowrap; }
+
+  /* offline indicator on transaction */
+  .tx-pending { opacity: 0.55; }
+  .tx-pending .tx-meta::after { content: ' · pending sync'; color: var(--accent); }
 
   .tx-del {
     background: none; border: none; color: var(--muted); cursor: pointer;
@@ -259,8 +267,6 @@
     min-height: 58px;
   }
   .send-now-btn:active { background: var(--accent2); border-color: var(--accent2); color: #0f0f0f; }
-
-  .copy-btn { }
 
   .danger-btn { color: #7a3a3a; border-color: #3a2020; }
   .danger-btn:active { color: var(--danger) !important; border-color: var(--danger) !important; }
@@ -360,7 +366,7 @@
   <h1>SPEND LOG</h1>
   <div class="header-right">
     <div class="date" id="dateDisplay"></div>
-    <div class="sync-status idle" id="syncStatus">Auto-send at midnight</div>
+    <div class="sync-status idle" id="syncStatus">Connecting…</div>
   </div>
 </header>
 
@@ -381,7 +387,7 @@
     <div class="send-banner" id="sendBanner"></div>
     <div class="slabel">Transactions</div>
     <div class="tx-list" id="txList">
-      <div class="empty">No transactions yet — add one below.</div>
+      <div class="empty">Loading…</div>
     </div>
   </div>
 
@@ -400,13 +406,13 @@
   <!-- EXPORT -->
   <div class="tab-panel" id="tab-export">
     <div class="export-hint">
-      Data auto-sends to your Google Sheet at midnight.<br>
-      Use <span>Send to sheet now</span> to push immediately, or <span>Copy sheet row</span> to paste manually.
+      Data syncs to Firebase in real-time. Make will send it to your Google Sheet automatically at 23:55.<br>
+      Use <span>Send to sheet now</span> to push immediately if needed.
     </div>
     <div class="export-box" id="exportBox">Log transactions to generate your row.</div>
     <div class="btn-grid">
-      <button class="outline-btn send-now-btn" onclick="sendToSheet(true)">⬆ Send to sheet now</button>
-      <button class="outline-btn copy-btn" onclick="copySheetRow()">📋 Copy row</button>
+      <button class="outline-btn send-now-btn" onclick="sendToSheet()">⬆ Send to sheet now</button>
+      <button class="outline-btn" onclick="copySheetRow()">📋 Copy row</button>
       <button class="outline-btn" onclick="downloadCSV()">Download CSV</button>
       <button class="outline-btn danger-btn" onclick="clearDay()">Clear day</button>
     </div>
@@ -427,24 +433,45 @@
   <div class="cat-strip" id="categoryBtns"></div>
 </div>
 
-<script>
-// ── Config ──────────────────────────────────────────────
-const WEBHOOK_URL = 'https://hook.eu2.make.com/xzl9l96bsg9d7yg2qb3d1au6oks10hb7';
-const SEND_HOUR   = 23; // 11:55pm
-const SEND_MIN    = 55;
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics-compat.js"></script>
 
-// ── Data ────────────────────────────────────────────────
+<script>
+// ── Firebase config ──────────────────────────────────────
+const firebaseConfig = {
+  apiKey:            "AIzaSyBkxrn2sU4_9sZiWI1uhnys9gQVi83ABX4",
+  authDomain:        "expenses-logger-68923.firebaseapp.com",
+  databaseURL:       "https://expenses-logger-68923-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "expenses-logger-68923",
+  storageBucket:     "expenses-logger-68923.firebasestorage.app",
+  messagingSenderId: "502484639951",
+  appId:             "1:502484639951:web:bba5cfecb700c22fbad7ba",
+  measurementId:     "G-CQD7Y4H3M2"
+};
+
+firebase.initializeApp(firebaseConfig);
+firebase.analytics();
+const db = firebase.database();
+
+// ── Make webhook (manual send fallback) ─────────────────
+const WEBHOOK_URL = 'https://hook.eu2.make.com/xzl9l96bsg9d7yg2qb3d1au6oks10hb7';
+
+// ── App state ────────────────────────────────────────────
 const CATEGORIES = ['food','shopping','entertainment','other'];
 const CAT_LABELS = { food:'Food', shopping:'Shopping', entertainment:'Entertainment', other:'Other' };
 let selectedCat  = 'food';
-let transactions = [];
-let midnightTimer = null;
+let transactions = [];  // local mirror of Firebase data
+let isOnline     = true;
 
-// ── Init ────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────
 function init() {
   document.getElementById('dateDisplay').textContent =
-    new Date().toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'2-digit' }).toUpperCase();
+    new Date().toLocaleDateString('en-GB', {
+      weekday:'short', day:'numeric', month:'short', year:'2-digit'
+    }).toUpperCase();
 
+  // Category buttons
   const strip = document.getElementById('categoryBtns');
   CATEGORIES.forEach(cat => {
     const btn = document.createElement('button');
@@ -455,98 +482,86 @@ function init() {
     strip.appendChild(btn);
   });
 
-  const saved = localStorage.getItem('spendlog_' + todayKey());
-  if (saved) { transactions = JSON.parse(saved); render(); }
+  // Keyboard shortcuts
+  document.getElementById('amountInput').addEventListener('keydown', e => { if (e.key==='Enter') addTransaction(); });
+  document.getElementById('descInput').addEventListener('keydown',   e => { if (e.key==='Enter') addTransaction(); });
 
-  document.getElementById('amountInput').addEventListener('keydown', e => { if(e.key==='Enter') addTransaction(); });
-  document.getElementById('descInput').addEventListener('keydown',   e => { if(e.key==='Enter') addTransaction(); });
+  // Online/offline detection
+  window.addEventListener('online',  () => { isOnline = true;  onOnline(); });
+  window.addEventListener('offline', () => { isOnline = false; setSyncStatus('offline', 'Offline — changes queued'); });
 
-  scheduleDailySend();
+  // Subscribe to today's Firebase data (real-time listener)
+  subscribeToday();
 }
 
-// ── Scheduling ──────────────────────────────────────────
-function scheduleDailySend() {
-  if (midnightTimer) clearTimeout(midnightTimer);
+// ── Firebase real-time listener ───────────────────────────
+function subscribeToday() {
+  const todayRef = db.ref('transactions/' + todayKey());
 
-  const now  = new Date();
-  const fire = new Date(now);
-  fire.setHours(SEND_HOUR, SEND_MIN, 0, 0);
+  setSyncStatus('syncing', 'Syncing…');
 
-  // If that time has already passed today, schedule for tomorrow
-  if (fire <= now) fire.setDate(fire.getDate() + 1);
-
-  const msUntil = fire - now;
-  const hh = Math.floor(msUntil / 3600000);
-  const mm = Math.floor((msUntil % 3600000) / 60000);
-
-  setSyncStatus('idle', `Auto-send in ${hh}h ${mm}m`);
-
-  midnightTimer = setTimeout(() => {
-    sendToSheet(false);
-    // Re-schedule for the next day
-    setTimeout(scheduleDailySend, 60000);
-  }, msUntil);
+  todayRef.on('value', snapshot => {
+    const data = snapshot.val();
+    // Convert Firebase object to sorted array
+    if (data) {
+      transactions = Object.entries(data)
+        .map(([id, tx]) => ({ ...tx, id }))
+        .sort((a, b) => b.id.localeCompare(a.id)); // newest first
+    } else {
+      transactions = [];
+    }
+    // Update localStorage cache
+    localStorage.setItem('spendlog_' + todayKey(), JSON.stringify(transactions));
+    setSyncStatus('ok', 'Synced ✓');
+    render();
+  }, err => {
+    // Firebase read failed — fall back to localStorage
+    setSyncStatus('error', 'Sync error — using local cache');
+    const cached = localStorage.getItem('spendlog_' + todayKey());
+    if (cached) { transactions = JSON.parse(cached); render(); }
+  });
 }
 
-// ── Send to Make webhook ────────────────────────────────
-async function sendToSheet(manual = false) {
+function onOnline() {
+  setSyncStatus('syncing', 'Reconnecting…');
+  // Firebase SDK reconnects automatically; the listener will fire again
+  // Flush any pending local transactions that didn't make it
+  const pending = JSON.parse(localStorage.getItem('spendlog_pending_' + todayKey()) || '[]');
+  pending.forEach(tx => writeTransaction(tx));
+  localStorage.removeItem('spendlog_pending_' + todayKey());
+}
+
+// ── Write a transaction to Firebase ──────────────────────
+function writeTransaction(tx) {
+  const { id, ...data } = tx;
+  return db.ref('transactions/' + todayKey() + '/' + id).set(data)
+    .then(() => {
+      // Also update the running summary node (what Make reads)
+      return updateSummary();
+    });
+}
+
+// ── Update summary node (Make reads this at 23:55) ────────
+function updateSummary() {
   const subs  = getSubtotals();
   const total = getTotal();
+  const _d    = new Date();
+  const _wd   = _d.toLocaleDateString('en-GB', {weekday:'short'});
+  const sheetDate = `${_wd},${_d.getDate()}/${_d.getMonth()+1}/${String(_d.getFullYear()).slice(2)}`;
 
-  if (total === 0 && !manual) return; // nothing to send
-
-  // Build date in exact sheet format: Fri,6/3/26
-  const _d = new Date();
-  const _wd = _d.toLocaleDateString('en-GB', {weekday:'short'});
-  const _sheetDate = `${_wd},${_d.getDate()}/${_d.getMonth()+1}/${String(_d.getFullYear()).slice(2)}`;
-
-  const payload = {
-    date:          todayKey(),    // YYYY-MM-DD (backup reference)
-    sheetDate:     _sheetDate,    // e.g. Fri,6/3/26 — matches sheet exactly
+  return db.ref('summaries/' + todayKey()).set({
+    date:          todayKey(),
+    sheetDate:     sheetDate,
     food:          subs['food']          > 0 ? (-subs['food']).toFixed(2)          : '',
     shopping:      subs['shopping']      > 0 ? (-subs['shopping']).toFixed(2)      : '',
     entertainment: subs['entertainment'] > 0 ? (-subs['entertainment']).toFixed(2) : '',
     other:         subs['other']         > 0 ? (-subs['other']).toFixed(2)         : '',
-    total:         total > 0 ? (-total).toFixed(2) : ''
-  };
-
-  showBanner('sending', '⏳ Sending to Google Sheet…');
-  setSyncStatus('sending', 'Sending…');
-
-  try {
-    const res = await fetch(WEBHOOK_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload)
-    });
-
-    if (res.ok) {
-      showBanner('ok', `✓ Sent to sheet at ${new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'})}`);
-      setSyncStatus('ok', `Sent ✓ ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`);
-      localStorage.setItem('spendlog_lastsent_' + todayKey(), Date.now());
-    } else {
-      throw new Error('HTTP ' + res.status);
-    }
-  } catch(err) {
-    showBanner('error', `✗ Send failed (${err.message}) — use Copy Row as fallback`);
-    setSyncStatus('error', 'Send failed');
-  }
+    total:         total > 0 ? (-total).toFixed(2) : '',
+    updatedAt:     new Date().toISOString()
+  });
 }
 
-function showBanner(type, msg) {
-  const b = document.getElementById('sendBanner');
-  b.className = `send-banner visible ${type}`;
-  b.textContent = msg;
-  if (type === 'ok') setTimeout(() => b.classList.remove('visible'), 5000);
-}
-
-function setSyncStatus(type, msg) {
-  const el = document.getElementById('syncStatus');
-  el.className = 'sync-status ' + type;
-  el.textContent = msg;
-}
-
-// ── Core functions ──────────────────────────────────────
+// ── Core actions ──────────────────────────────────────────
 function todayKey() { return new Date().toISOString().slice(0,10); }
 
 function switchTab(name, btn) {
@@ -571,21 +586,46 @@ function addTransaction() {
     return;
   }
   const desc = document.getElementById('descInput').value.trim() || '—';
-  transactions.unshift({ id: Date.now(), amount: amtRaw, desc, cat: selectedCat,
-    time: new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) });
-  save(); render();
+  const tx = {
+    id:     Date.now().toString(),
+    amount: amtRaw,
+    desc,
+    cat:    selectedCat,
+    time:   new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})
+  };
+
+  // Optimistically add to local state immediately
+  transactions.unshift(tx);
+  render();
+
   document.getElementById('amountInput').value = '';
-  document.getElementById('descInput').value = '';
+  document.getElementById('descInput').value   = '';
   document.getElementById('amountInput').focus();
+
+  if (isOnline) {
+    setSyncStatus('syncing', 'Saving…');
+    writeTransaction(tx).catch(() => queuePending(tx));
+  } else {
+    queuePending(tx);
+  }
+}
+
+function queuePending(tx) {
+  const pending = JSON.parse(localStorage.getItem('spendlog_pending_' + todayKey()) || '[]');
+  pending.push(tx);
+  localStorage.setItem('spendlog_pending_' + todayKey(), JSON.stringify(pending));
+  setSyncStatus('offline', 'Offline — ' + pending.length + ' pending');
 }
 
 function deleteTransaction(id) {
   if (!confirm('Remove this transaction?')) return;
   transactions = transactions.filter(t => t.id !== id);
-  save(); render();
+  render();
+  db.ref('transactions/' + todayKey() + '/' + id).remove()
+    .then(() => updateSummary())
+    .catch(() => setSyncStatus('error', 'Delete failed — try again'));
 }
 
-function save() { localStorage.setItem('spendlog_' + todayKey(), JSON.stringify(transactions)); }
 function getTotal() { return transactions.reduce((s,t) => s + t.amount, 0); }
 
 function getSubtotals() {
@@ -599,23 +639,27 @@ function fmtNum(n) { return n > 0 ? (-n).toFixed(2) : ''; }
 function fmt(n)    { return '£' + n.toFixed(2); }
 function esc(s)    { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ── Render ──────────────────────────────────────────────
+// ── Render ────────────────────────────────────────────────
 function render() {
   const total = getTotal();
   document.getElementById('totalDisplay').textContent  = fmt(total);
   document.getElementById('totalDisplay2').textContent = fmt(total);
 
+  // Pending IDs (offline queue)
+  const pending = JSON.parse(localStorage.getItem('spendlog_pending_' + todayKey()) || '[]');
+  const pendingIds = new Set(pending.map(t => t.id));
+
   document.getElementById('txList').innerHTML = transactions.length === 0
     ? '<div class="empty">No transactions yet — add one below.</div>'
     : transactions.map(t => `
-        <div class="tx-item">
+        <div class="tx-item ${pendingIds.has(t.id) ? 'tx-pending' : ''}">
           <div class="cat-dot" data-cat="${t.cat}"></div>
           <div class="tx-body">
             <div class="tx-desc">${esc(t.desc)}</div>
             <div class="tx-meta">${CAT_LABELS[t.cat]} · ${t.time}</div>
           </div>
           <div class="tx-amt">${fmt(t.amount)}</div>
-          <button class="tx-del" onclick="deleteTransaction(${t.id})">×</button>
+          <button class="tx-del" onclick="deleteTransaction('${t.id}')">×</button>
         </div>`).join('');
 
   const subs = getSubtotals();
@@ -643,7 +687,56 @@ function render() {
         `  ${t.time}  ${CAT_LABELS[t.cat].padEnd(16)}${fmt(t.amount)}  ${t.desc}`).join('\n');
 }
 
-// ── Export helpers ──────────────────────────────────────
+// ── Status helpers ────────────────────────────────────────
+function setSyncStatus(type, msg) {
+  const el = document.getElementById('syncStatus');
+  el.className = 'sync-status ' + type;
+  el.textContent = msg;
+}
+
+function showBanner(type, msg) {
+  const b = document.getElementById('sendBanner');
+  b.className = `send-banner visible ${type}`;
+  b.textContent = msg;
+  if (type === 'ok') setTimeout(() => b.classList.remove('visible'), 5000);
+}
+
+// ── Manual webhook send (fallback / instant push) ─────────
+async function sendToSheet() {
+  const subs  = getSubtotals();
+  const total = getTotal();
+  const _d    = new Date();
+  const _wd   = _d.toLocaleDateString('en-GB', {weekday:'short'});
+  const sheetDate = `${_wd},${_d.getDate()}/${_d.getMonth()+1}/${String(_d.getFullYear()).slice(2)}`;
+
+  const payload = {
+    date:          todayKey(),
+    sheetDate,
+    food:          subs['food']          > 0 ? (-subs['food']).toFixed(2)          : '',
+    shopping:      subs['shopping']      > 0 ? (-subs['shopping']).toFixed(2)      : '',
+    entertainment: subs['entertainment'] > 0 ? (-subs['entertainment']).toFixed(2) : '',
+    other:         subs['other']         > 0 ? (-subs['other']).toFixed(2)         : '',
+    total:         total > 0 ? (-total).toFixed(2) : ''
+  };
+
+  showBanner('sending', '⏳ Sending to Google Sheet…');
+  try {
+    const res = await fetch(WEBHOOK_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+    if (res.ok) {
+      showBanner('ok', `✓ Sent to sheet at ${_d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`);
+    } else {
+      throw new Error('HTTP ' + res.status);
+    }
+  } catch(err) {
+    showBanner('error', `✗ Send failed (${err.message})`);
+  }
+}
+
+// ── Export helpers ────────────────────────────────────────
 function copySheetRow() {
   const subs = getSubtotals();
   const row  = [fmtNum(subs['food']), fmtNum(subs['shopping']),
@@ -678,7 +771,11 @@ function downloadCSV() {
 
 function clearDay() {
   if (!confirm('Clear all transactions for today?')) return;
-  transactions = []; save(); render();
+  transactions = [];
+  render();
+  db.ref('transactions/' + todayKey()).remove();
+  db.ref('summaries/' + todayKey()).remove();
+  localStorage.removeItem('spendlog_' + todayKey());
 }
 
 init();
