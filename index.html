@@ -639,15 +639,28 @@ function updateSummary() {
   const _wd   = _d.toLocaleDateString('en-GB', {weekday:'short'});
   const sheetDate = `${_wd},${_d.getDate()}/${_d.getMonth()+1}/${String(_d.getFullYear()).slice(2)}`;
 
+  // Build per-category note strings from individual transactions (oldest first)
+  const notes = {};
+  CATEGORIES.forEach(cat => {
+    const catTxs = [...transactions].filter(t => t.cat === cat).reverse();
+    notes[cat] = catTxs.length > 0
+      ? catTxs.map(t => t.desc !== '\u2014' ? `${t.desc} \xa3${t.amount.toFixed(2)}` : `\xa3${t.amount.toFixed(2)}`).join('\n')
+      : '';
+  });
+
   return db.ref('summaries/' + todayKey()).set({
-    date:          todayKey(),
-    sheetDate:     sheetDate,
-    food:          subs['food']          > 0 ? (-subs['food']).toFixed(2)          : '',
-    shopping:      subs['shopping']      > 0 ? (-subs['shopping']).toFixed(2)      : '',
-    entertainment: subs['entertainment'] > 0 ? (-subs['entertainment']).toFixed(2) : '',
-    other:         subs['other']         > 0 ? (-subs['other']).toFixed(2)         : '',
-    total:         total > 0 ? (-total).toFixed(2) : '',
-    updatedAt:     new Date().toISOString()
+    date:                todayKey(),
+    sheetDate:           sheetDate,
+    food:                subs['food']          > 0 ? (-subs['food']).toFixed(2)          : '',
+    shopping:            subs['shopping']      > 0 ? (-subs['shopping']).toFixed(2)      : '',
+    entertainment:       subs['entertainment'] > 0 ? (-subs['entertainment']).toFixed(2) : '',
+    other:               subs['other']         > 0 ? (-subs['other']).toFixed(2)         : '',
+    total:               total > 0 ? (-total).toFixed(2) : '',
+    food_notes:          notes['food'],
+    shopping_notes:      notes['shopping'],
+    entertainment_notes: notes['entertainment'],
+    other_notes:         notes['other'],
+    updatedAt:           new Date().toISOString()
   });
 }
 
