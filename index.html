@@ -526,6 +526,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 
 <script>
 // ── Firebase config ──────────────────────────────────────
@@ -542,7 +543,8 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 firebase.analytics();
-const db = firebase.database();
+const db   = firebase.database();
+const auth = firebase.auth();
 
 // ── Make webhook (manual send fallback) ─────────────────
 const WEBHOOK_URL = 'https://hook.eu2.make.com/xzl9l96bsg9d7yg2qb3d1au6oks10hb7';
@@ -580,8 +582,14 @@ function init() {
   window.addEventListener('online',  () => { isOnline = true;  onOnline(); });
   window.addEventListener('offline', () => { isOnline = false; setSyncStatus('offline', 'Offline — changes queued'); });
 
-  // Subscribe to today's Firebase data (real-time listener)
-  subscribeToday();
+  // Sign in anonymously then subscribe
+  auth.signInAnonymously()
+    .then(() => subscribeToday())
+    .catch(() => {
+      setSyncStatus('error', 'Auth failed — using local cache');
+      const cached = localStorage.getItem('spendlog_' + todayKey());
+      if (cached) { transactions = JSON.parse(cached); render(); }
+    });
 }
 
 // ── Firebase real-time listener ───────────────────────────
