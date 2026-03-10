@@ -376,6 +376,19 @@
   .tx-pending { opacity: 0.55; }
   .tx-pending .tx-meta::after { content: ' · pending sync'; color: var(--accent); }
 
+  .tx-edit-btn, .tx-del-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.1rem; line-height: 1;
+    min-width: 34px; min-height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; transition: color 0.12s, background 0.12s;
+    flex-shrink: 0;
+  }
+  .tx-edit-btn { color: var(--muted); }
+  .tx-edit-btn:hover, .tx-edit-btn:active { color: var(--accent2); background: var(--surface2); }
+  .tx-del-btn  { color: var(--muted); }
+  .tx-del-btn:hover,  .tx-del-btn:active  { color: var(--danger);  background: #2a1818; }
+
   /* ── Subtotals ───────────────────────────────────────────────────── */
   .sub-card {
     background: var(--surface);
@@ -862,7 +875,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.1';
+const APP_VERSION   = 'v4.1.1';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1454,6 +1467,8 @@ function render() {
           </div>
           <div class="tx-amt">${fmt(t.amount)}</div>
           ${t.excludeWeekly ? '<div class="tx-excluded-badge">excl.</div>' : ''}
+          <button class="tx-edit-btn" onclick="openEditSheet('${t.id}')" title="Edit">✎</button>
+          <button class="tx-del-btn"  onclick="deleteTransaction('${t.id}')" title="Delete">×</button>
         </div>
       </div>`).join('');
   }
