@@ -393,6 +393,11 @@
   .tx-del-btn  { color: var(--muted); }
   .tx-del-btn:hover,  .tx-del-btn:active  { color: var(--danger);  background: #2a1818; }
 
+  /* Hide buttons on touchscreens — swipe gestures handle it there */
+  @media (hover: none) and (pointer: coarse) {
+    .tx-edit-btn, .tx-del-btn { display: none; }
+  }
+
   /* ── Subtotals ───────────────────────────────────────────────────── */
   .sub-card {
     background: var(--surface);
@@ -879,7 +884,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.2.1';
+const APP_VERSION   = 'v4.3';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1472,10 +1477,10 @@ function render() {
             <div class="tx-desc">${esc(t.desc)}</div>
             <div class="tx-meta">${CAT_LABELS[t.cat]} · ${t.time}</div>
           </div>
-          <div class="tx-amt">${fmt(t.amount)}</div>
           ${t.excludeWeekly ? '<div class="tx-excluded-badge">excl.</div>' : ''}
           <button class="tx-edit-btn" onclick="openEditSheet('${t.id}')" title="Edit">✎</button>
           <button class="tx-del-btn"  onclick="deleteTransaction('${t.id}')" title="Delete">×</button>
+          <div class="tx-amt">${fmt(t.amount)}</div>
         </div>
       </div>`).join('');
   }
