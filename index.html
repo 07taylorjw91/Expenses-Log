@@ -138,6 +138,10 @@
   }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
+  /* When entry bar is hidden, other tabs don't need the giant bottom clearance */
+  #tab-totals.active, #tab-history.active, #tab-export.active {
+    padding-bottom: 40px;
+  }
 
   /* ── Total pill ─────────────────────────────────────────────────── */
   .total-pill {
@@ -151,7 +155,7 @@
     align-items: center;
   }
   .total-pill .lbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted); }
-  .total-pill .amt { font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
+  .total-pill .amt { font-family: 'Syne', sans-serif; font-size: 1.55rem; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
 
   /* ── Weekly card (Totals tab) ───────────────────────────────────── */
   .weekly-card {
@@ -168,7 +172,7 @@
     margin-bottom: 12px;
   }
   .weekly-header .lbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted); }
-  .weekly-header .amt { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; color: var(--accent2); letter-spacing: -0.02em; }
+  .weekly-header .amt { font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 800; color: var(--accent2); letter-spacing: -0.02em; }
   .weekly-header .amt.warn { color: var(--amber); }
   .weekly-header .amt.over { color: var(--danger); }
   .weekly-prog {
@@ -746,8 +750,8 @@
 <div class="tabs">
   <button class="tab active"  onclick="switchTab('log',     this)">Log</button>
   <button class="tab"         onclick="switchTab('totals',  this)">Totals</button>
-  <button class="tab"         onclick="switchTab('export',  this)">Export</button>
   <button class="tab"         onclick="switchTab('history', this)">History</button>
+  <button class="tab"         onclick="switchTab('export',  this)">Export</button>
 </div>
 
 <div class="tab-content">
@@ -875,7 +879,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.1.1';
+const APP_VERSION   = 'v4.1';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1096,6 +1100,9 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
+
+  // Entry bar only visible on Log tab
+  document.querySelector('.entry-bar').style.display = name === 'log' ? '' : 'none';
 
   if (name === 'history' && !historyLoaded) {
     historyLoaded = true;
