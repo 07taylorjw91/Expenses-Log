@@ -887,7 +887,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.3.3';
+const APP_VERSION   = 'v4.3.4';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1046,7 +1046,7 @@ function subscribeToday() {
   ref.on('value', snap => {
     const data = snap.val();
     transactions = data
-      ? Object.entries(data).map(([id, tx]) => ({...tx, id})).sort((a,b) => b.id.localeCompare(a.id))
+      ? Object.entries(data).map(([id, tx]) => ({...tx, id, date: tx.date || todayKey()})).sort((a,b) => b.id.localeCompare(a.id))
       : [];
     localStorage.setItem('spendlog_' + todayKey(), JSON.stringify(transactions));
     setSyncStatus('ok', 'Synced ✓');
@@ -1072,8 +1072,9 @@ function onOnline() {
 // ── Firebase write ────────────────────────────────────────────────────
 function writeTransaction(tx) {
   const { id, ...data } = tx;
-  return db.ref('transactions/' + todayKey() + '/' + id).set(data)
-    .then(() => updateSummary());
+  const dateKey = tx.date || todayKey();
+  return db.ref('transactions/' + dateKey + '/' + id).set(data)
+    .then(() => { if (dateKey === todayKey()) updateSummary(); });
 }
 
 function updateSummary() {
@@ -1149,6 +1150,7 @@ function addTransaction() {
     amount: amtRaw,
     desc,
     cat:    selectedCat,
+    date:   todayKey(),
     time:   new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   };
   transactions.unshift(tx);
@@ -1428,7 +1430,7 @@ async function loadHistory() {
     const txsByDate = {};
     txSnap.forEach(daySnap => {
       const txs = [];
-      daySnap.forEach(txChild => txs.push({ ...txChild.val(), id: txChild.key }));
+      daySnap.forEach(txChild => txs.push({ ...txChild.val(), id: txChild.key, date: daySnap.key }));
       txsByDate[daySnap.key] = txs.sort((a, b) => b.id.localeCompare(a.id));
     });
 
