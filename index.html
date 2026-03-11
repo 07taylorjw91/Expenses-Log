@@ -887,7 +887,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.3.5';
+const APP_VERSION   = 'v4.3.6';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1417,7 +1417,11 @@ async function loadHistory() {
     sumSnap.forEach(d => { if (d.key !== todayKey()) allDates.add(d.key); });
     txSnap.forEach(d  => { if (d.key !== todayKey()) allDates.add(d.key); });
 
-    const pastDates = [...allDates].sort().reverse();
+    const pastDates = [...allDates].sort().reverse().filter(date => {
+      const sum = sumByDate[date];
+      if (sum) return Math.abs(parseFloat(sum.total) || 0) > 0;
+      return (txsByDate[date] || []).length > 0;
+    });
     if (!pastDates.length) {
       list.innerHTML = '<div class="empty">No history yet.</div>';
       return;
