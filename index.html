@@ -334,7 +334,10 @@
     display: flex;
     align-items: center;
     border-radius: 12px;
+    opacity: 0;
+    transition: opacity 0.1s;
   }
+  .swipe-wrapper.is-swiping .swipe-bg { opacity: 1; }
   .swipe-bg-delete {
     background: var(--danger);
     justify-content: flex-start;
@@ -376,7 +379,7 @@
   .tx-body  { flex: 1; min-width: 0; }
   .tx-desc  { font-size: 0.85rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tx-meta  { font-size: 0.6rem; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
-  .tx-amt   { font-size: 1rem; color: var(--accent); font-weight: 500; white-space: nowrap; }
+  .tx-amt   { font-size: 1rem; color: var(--accent); font-weight: 500; white-space: nowrap; width: 68px; text-align: right; flex-shrink: 0; }
   .tx-pending { opacity: 0.55; }
   .tx-pending .tx-meta::after { content: ' · pending sync'; color: var(--accent); }
 
@@ -884,7 +887,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.3';
+const APP_VERSION   = 'v4.3.1';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1265,11 +1268,13 @@ function initSwipe(container) {
     const clamped = Math.max(-90, Math.min(90, dx));
     swipe.el.style.transition = 'none';
     swipe.el.style.transform  = `translateX(${clamped}px)`;
+    swipe.el.closest('.swipe-wrapper').classList.add('is-swiping');
   }, { passive: false });
 
   container.addEventListener('touchend', () => {
     if (!swipe.el) return;
     const { dx, id, el } = swipe;
+    el.closest('.swipe-wrapper').classList.remove('is-swiping');
     el.style.transition = 'transform 0.2s ease';
     el.style.transform  = '';
     swipe.el = null;
