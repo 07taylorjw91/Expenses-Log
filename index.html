@@ -887,7 +887,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.3.4';
+const APP_VERSION   = 'v4.3.5';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1406,27 +1406,28 @@ async function loadHistory() {
   const list = document.getElementById('historyList');
   list.innerHTML = '<div class="empty">Loading history…</div>';
   try {
-    // Ensure we're authenticated before reading the protected transactions node
     await auth.signInAnonymously().catch(() => {});
 
-    // Fetch transactions for past dates
-    const txSnap  = await db.ref('transactions').orderByKey().limitToLast(30).once('value');
-    // Fetch summaries so we can fill in dates that have no transactions node
+    // Summaries are the authoritative source — always complete
     const sumSnap = await db.ref('summaries').orderByKey().limitToLast(30).once('value');
+    // Transactions as fallback for days with no summary
+    const txSnap  = await db.ref('transactions').orderByKey().limitToLast(30).once('value');
 
-    // Build a set of all past dates from both nodes
     const allDates = new Set();
-    txSnap.forEach(d  => { if (d.key !== todayKey()) allDates.add(d.key); });
     sumSnap.forEach(d => { if (d.key !== todayKey()) allDates.add(d.key); });
+    txSnap.forEach(d  => { if (d.key !== todayKey()) allDates.add(d.key); });
 
     const pastDates = [...allDates].sort().reverse();
-
     if (!pastDates.length) {
       list.innerHTML = '<div class="empty">No history yet.</div>';
       return;
     }
 
-    // Build txsByDate from transactions snapshot
+    // Build summaries map
+    const sumByDate = {};
+    sumSnap.forEach(s => { sumByDate[s.key] = s.val(); });
+
+    // Build transactions map (fallback only)
     const txsByDate = {};
     txSnap.forEach(daySnap => {
       const txs = [];
@@ -1434,39 +1435,34 @@ async function loadHistory() {
       txsByDate[daySnap.key] = txs.sort((a, b) => b.id.localeCompare(a.id));
     });
 
-    // Build summaries map for fallback
-    const sumByDate = {};
-    sumSnap.forEach(s => { sumByDate[s.key] = s.val(); });
-
-    // For dates missing from transactions, reconstruct from summary notes
-    pastDates.forEach(date => {
-      if (txsByDate[date] && txsByDate[date].length) return; // already have real data
-      const sum = sumByDate[date];
-      if (!sum) return;
-      const reconstructed = [];
-      CATEGORIES.forEach(cat => {
-        const notes = sum[cat + '_notes'];
-        if (!notes) return;
-        notes.split('\n').forEach(line => {
-          line = line.trim();
-          if (!line) return;
-          // Format: "Desc £amount" or "£amount"
-          const match = line.match(/^(.*?)\s*£([\d.]+)$/) || line.match(/^£([\d.]+)$/);
-          if (!match) return;
-          const amount = parseFloat(match[2] || match[1]);
-          const desc   = match[2] ? (match[1].trim() || '—') : '—';
-          if (!isNaN(amount)) reconstructed.push({ id: Date.now() + Math.random(), amount, desc, cat, time: '' });
-        });
-      });
-      if (reconstructed.length) txsByDate[date] = reconstructed;
-    });
-
     list.innerHTML = pastDates.map(date => {
-      const txs   = txsByDate[date] || [];
-      // For summary-only dates, use the stored total directly if available
-      const sumTotal = sumByDate[date]?.total ? Math.abs(parseFloat(sumByDate[date].total)) : null;
-      const total = sumTotal !== null && !txsByDate[date]?.length ? sumTotal
-                  : txs.reduce((s, t) => s + t.amount, 0);
+      const sum = sumByDate[date];
+      let txs   = [];
+      let total = 0;
+
+      if (sum) {
+        // Primary: reconstruct from summary notes — these are always complete
+        total = Math.abs(parseFloat(sum.total) || 0);
+        CATEGORIES.forEach(cat => {
+          const notes = (sum[cat + '_notes'] || '').trim();
+          if (!notes) return;
+          notes.split('\n').forEach(line => {
+            line = line.trim();
+            if (!line) return;
+            // "Desc £amount" or just "£amount"
+            const m = line.match(/^(.*?)\s*£([\d.]+)$/);
+            if (!m) return;
+            const amount = parseFloat(m[2]);
+            const desc   = m[1].trim() || '—';
+            if (!isNaN(amount)) txs.push({ id: line + cat, amount, desc, cat, time: '' });
+          });
+        });
+      } else {
+        // Fallback: use raw transactions node
+        txs   = txsByDate[date] || [];
+        total = txs.reduce((s, t) => s + t.amount, 0);
+      }
+
       const txsHtml = txs.map(t => `
         <div class="history-tx">
           <div class="cat-dot" data-cat="${t.cat}"></div>
@@ -1476,6 +1472,7 @@ async function loadHistory() {
           </div>
           <div class="tx-amt">${fmt(t.amount)}</div>
         </div>`).join('');
+
       return `
         <div class="history-day">
           <div class="history-header" onclick="toggleHistoryDay(this)" data-date="${date}">
@@ -1488,6 +1485,7 @@ async function loadHistory() {
           </div>
         </div>`;
     }).join('');
+
   } catch(e) {
     list.innerHTML = '<div class="empty">Couldn\'t load history.</div>';
   }
