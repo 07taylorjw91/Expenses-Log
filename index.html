@@ -397,7 +397,7 @@
   .tx-del-btn:hover,  .tx-del-btn:active  { color: var(--danger);  background: #2a1818; }
 
   /* Hide buttons on touchscreens — swipe gestures handle it there */
-  @media (hover: none) and (pointer: coarse) {
+  @media (pointer: coarse) {
     .tx-edit-btn, .tx-del-btn { display: none; }
   }
 
@@ -887,7 +887,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.3.2';
+const APP_VERSION   = 'v4.3.3';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -924,7 +924,7 @@ let isOnline        = true;
 let shortcuts       = [];
 let editingId       = null;
 let editingCat      = 'food';
-let authReady = null; // resolves when anonymous auth is complete
+let historyLoaded   = false;
 let weeklyLoaded    = false;
 let notifTimer      = null;
 
@@ -1027,10 +1027,8 @@ function init() {
   // Swipe on tx-list (event delegation)
   initSwipe(document.getElementById('txList'));
 
-let historyLoaded   = false;
-
   // Sign in and subscribe
-  authReady = auth.signInAnonymously()
+  auth.signInAnonymously()
     .then(() => subscribeToday())
     .catch(() => {
       setSyncStatus('error', 'Auth failed — using local cache');
@@ -1406,8 +1404,8 @@ async function loadHistory() {
   const list = document.getElementById('historyList');
   list.innerHTML = '<div class="empty">Loading history…</div>';
   try {
-    // Wait for auth before reading the protected transactions node
-    if (authReady) await authReady.catch(() => {});
+    // Ensure we're authenticated before reading the protected transactions node
+    await auth.signInAnonymously().catch(() => {});
 
     // Fetch transactions for past dates
     const txSnap  = await db.ref('transactions').orderByKey().limitToLast(30).once('value');
