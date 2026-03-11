@@ -143,6 +143,32 @@
     padding-bottom: 40px;
   }
 
+  /* ── Pull-to-refresh indicator ──────────────────────────────────── */
+  .ptr-indicator {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center;
+    height: 0; overflow: hidden;
+    transition: height 0.2s ease;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .ptr-indicator .ptr-icon {
+    font-size: 1.1rem;
+    color: var(--accent2);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    opacity: 0;
+  }
+  .ptr-indicator.ptr-ready   .ptr-icon { opacity: 1; transform: rotate(180deg); }
+  .ptr-indicator.ptr-pulling .ptr-icon { opacity: 0.5; }
+  @keyframes ptr-spin {
+    to { transform: rotate(360deg); }
+  }
+  .ptr-indicator.ptr-loading .ptr-icon {
+    opacity: 1;
+    animation: ptr-spin 0.7s linear infinite;
+  }
+
   /* ── Total pill ─────────────────────────────────────────────────── */
   .total-pill {
     background: var(--surface);
@@ -762,7 +788,8 @@
   <button class="tab"         onclick="switchTab('export',  this)">Export</button>
 </div>
 
-<div class="tab-content">
+<div class="tab-content" id="tabContent" style="position:relative">
+<div class="ptr-indicator" id="ptrIndicator"><span class="ptr-icon">↻</span></div>
 
   <!-- LOG ──────────────────────────────────────────────────────────── -->
   <div class="tab-panel active" id="tab-log">
@@ -887,7 +914,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.3.6';
+const APP_VERSION   = 'v4.4';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1026,6 +1053,8 @@ function init() {
 
   // Swipe on tx-list (event delegation)
   initSwipe(document.getElementById('txList'));
+  initTabSwipe(document.getElementById('tabContent'));
+  initPullToRefresh(document.getElementById('tabContent'));
 
   // Sign in and subscribe
   auth.signInAnonymously()
@@ -1285,7 +1314,116 @@ function initSwipe(container) {
   });
 }
 
-// ── Shortcuts ─────────────────────────────────────────────────────────
+// ── Tab swipe (horizontal, on empty area) ─────────────────────────────
+const TAB_ORDER = ['log', 'totals', 'history', 'export'];
+
+function getCurrentTab() {
+  const active = document.querySelector('.tab-panel.active');
+  return active ? active.id.replace('tab-', '') : 'log';
+}
+
+function initTabSwipe(el) {
+  let ts = null;
+  el.addEventListener('touchstart', e => {
+    if (e.target.closest('.swipe-wrapper')) return; // let tx swipes handle it
+    ts = { x: e.touches[0].clientX, y: e.touches[0].clientY, locked: false, dir: null };
+  }, { passive: true });
+
+  el.addEventListener('touchmove', e => {
+    if (!ts || ts.dir === 'v') return;
+    const dx = e.touches[0].clientX - ts.x;
+    const dy = e.touches[0].clientY - ts.y;
+    if (!ts.locked) {
+      if (Math.abs(dy) > Math.abs(dx)) { ts.dir = 'v'; return; } // vertical — ignore
+      if (Math.abs(dx) < 12) return;                              // not moved enough yet
+      ts.locked = true; ts.dir = 'h';
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  el.addEventListener('touchend', e => {
+    if (!ts || ts.dir !== 'h') { ts = null; return; }
+    const dx = e.changedTouches[0].clientX - ts.x;
+    ts = null;
+    if (Math.abs(dx) < 50) return; // too short
+    const tabs   = TAB_ORDER;
+    const cur    = tabs.indexOf(getCurrentTab());
+    const next   = dx < 0 ? cur + 1 : cur - 1; // swipe left = next tab
+    if (next < 0 || next >= tabs.length) return;
+    const btn = document.querySelectorAll('.tab')[next];
+    switchTab(tabs[next], btn);
+  });
+}
+
+// ── Pull-to-refresh ────────────────────────────────────────────────────
+function initPullToRefresh(el) {
+  const indicator = document.getElementById('ptrIndicator');
+  const MAX_PULL  = 72;
+  let ptr = null;
+
+  el.addEventListener('touchstart', e => {
+    if (el.scrollTop > 0) return; // only trigger when already at top
+    if (e.target.closest('.swipe-wrapper')) return;
+    ptr = { y: e.touches[0].clientY, pulling: false, triggered: false };
+  }, { passive: true });
+
+  el.addEventListener('touchmove', e => {
+    if (!ptr) return;
+    const dy = e.touches[0].clientY - ptr.y;
+    if (dy <= 0) { ptr = null; return; } // pulling up — ignore
+    // Only block scroll if we're actually pulling down from the top
+    if (el.scrollTop === 0 && dy > 5) {
+      e.preventDefault();
+      ptr.pulling = true;
+      const progress = Math.min(dy, MAX_PULL);
+      const pct      = progress / MAX_PULL;
+      indicator.style.height   = (progress * 0.6) + 'px';
+      indicator.className      = 'ptr-indicator ' + (pct >= 1 ? 'ptr-ready' : 'ptr-pulling');
+      ptr.ready = pct >= 1;
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchend', async () => {
+    if (!ptr || !ptr.pulling) { ptr = null; return; }
+    const wasReady = ptr.ready;
+    ptr = null;
+    if (!wasReady) {
+      indicator.style.height = '0';
+      indicator.className    = 'ptr-indicator';
+      return;
+    }
+    // Trigger refresh
+    indicator.style.height = '44px';
+    indicator.className    = 'ptr-indicator ptr-loading';
+    await refreshCurrentTab();
+    indicator.style.height = '0';
+    indicator.className    = 'ptr-indicator';
+  });
+}
+
+async function refreshCurrentTab() {
+  const tab = getCurrentTab();
+  if (tab === 'log') {
+    setSyncStatus('syncing', 'Refreshing…');
+    await db.ref('transactions/' + todayKey()).once('value').then(snap => {
+      const data = snap.val();
+      transactions = data
+        ? Object.entries(data).map(([id, tx]) => ({...tx, id, date: tx.date || todayKey()}))
+            .sort((a,b) => b.id.localeCompare(a.id))
+        : [];
+      render();
+      setSyncStatus('ok', 'Synced ✓');
+    }).catch(() => setSyncStatus('error', 'Refresh failed'));
+  } else if (tab === 'totals') {
+    weeklyLoaded = false;
+    loadWeeklyTotal();
+  } else if (tab === 'history') {
+    historyLoaded = false;
+    await loadHistory();
+    historyLoaded = true;
+  }
+  // export tab has nothing to refresh
+}
 async function loadShortcuts() {
   try {
     // Load last 30 days of transactions for frequency analysis
