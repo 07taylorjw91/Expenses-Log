@@ -131,11 +131,25 @@
   /* ── Scrollable content ─────────────────────────────────────────── */
   .tab-content {
     flex: 1;
+    overflow: hidden; /* must be hidden to clip the 400%-wide slider */
+    position: relative;
+    min-height: 0; /* allow flex child to shrink below content size */
+  }
+  /* Each panel scrolls independently */
+  .tab-slider .tab-panel {
+    display: block;
+    width: 25%;
+    flex-shrink: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    padding: 16px 16px 300px;
+    padding: 16px 16px 40px;
+    box-sizing: border-box;
+    /* height filled by flex column on body */
+    min-height: 0;
   }
+  /* Log tab needs extra bottom clearance for the entry bar */
+  #tab-log { padding-bottom: 220px; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
   /* When entry bar is hidden, other tabs don't need the giant bottom clearance */
@@ -147,16 +161,11 @@
   .tab-slider {
     display: flex;
     width: 400%; /* 4 tabs */
+    height: 100%;
     will-change: transform;
   }
-  .tab-slider .tab-panel {
-    display: block;
-    width: 25%; /* each panel = 1 screen width */
-    flex-shrink: 0;
-    min-height: 1px; /* prevent collapse */
-  }
   .tab-slider.is-animating {
-    transition: transform 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: transform 0.42s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   /* ── Pull-to-refresh indicator ──────────────────────────────────── */
@@ -932,7 +941,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.5.1';
+const APP_VERSION   = 'v4.5.2';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1163,9 +1172,9 @@ function switchTab(name, btn, animate = true) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
-  // Reset scroll on the tab-content
-  const tc = document.getElementById('tabContent');
-  if (tc) tc.scrollTop = 0;
+  // Reset scroll on the newly active panel
+  const activePanel = document.getElementById('tab-' + name);
+  if (activePanel) activePanel.scrollTop = 0;
 
   // Entry bar only visible on Log tab
   document.querySelector('.entry-bar').style.display = name === 'log' ? '' : 'none';
@@ -1370,10 +1379,10 @@ function initTabSwipe(el) {
       ts.locked = true; ts.dir = 'h';
     }
     e.preventDefault();
-    // Drag slider live — resist at edges
+    // Drag slider live — damped so a small swipe doesn't jump far
     const baseOffset = ts.curIdx * 25;
     const vw         = el.offsetWidth;
-    let drag         = (dx / vw) * 100;
+    let drag         = (dx / vw) * 100 * 0.55; // 0.55 damping — less sensitive
     // Rubber-band at first/last tab
     if ((ts.curIdx === 0 && dx > 0) || (ts.curIdx === TAB_ORDER.length - 1 && dx < 0)) {
       drag = drag * 0.2;
@@ -1387,7 +1396,7 @@ function initTabSwipe(el) {
     const dx  = e.changedTouches[0].clientX - ts.x;
     const cur = ts.curIdx;
     ts = null;
-    const threshold = el.offsetWidth * 0.25;
+    const threshold = el.offsetWidth * 0.40;
     let next = cur;
     if (dx < -threshold && cur < TAB_ORDER.length - 1) next = cur + 1;
     if (dx >  threshold && cur > 0)                    next = cur - 1;
@@ -1402,8 +1411,12 @@ function initPullToRefresh(el) {
   const MAX_PULL  = 72;
   let ptr = null;
 
+  function activePanel() {
+    return document.querySelector('.tab-panel.active') || el;
+  }
+
   el.addEventListener('touchstart', e => {
-    if (el.scrollTop > 0) return; // only trigger when already at top
+    if (activePanel().scrollTop > 0) return; // only trigger when already at top
     if (e.target.closest('.swipe-wrapper')) return;
     ptr = { y: e.touches[0].clientY, pulling: false, triggered: false };
   }, { passive: true });
@@ -1413,7 +1426,7 @@ function initPullToRefresh(el) {
     const dy = e.touches[0].clientY - ptr.y;
     if (dy <= 0) { ptr = null; return; } // pulling up — ignore
     // Only block scroll if we're actually pulling down from the top
-    if (el.scrollTop === 0 && dy > 5) {
+    if (activePanel().scrollTop === 0 && dy > 5) {
       e.preventDefault();
       ptr.pulling = true;
       const progress = Math.min(dy, MAX_PULL);
