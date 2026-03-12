@@ -553,17 +553,22 @@
   .send-now-btn:active { background: var(--accent2); border-color: var(--accent2); color: #0f0f0f; }
   .danger-btn { color: #7a3a3a; border-color: #3a2020; }
   .danger-btn:active { color: var(--danger) !important; border-color: var(--danger) !important; }
-  .version-row {
+  .version-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 14px;
-    padding-top: 12px;
+    padding: 10px 20px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
-    font-size: 0.58rem;
-    color: var(--muted);
-    letter-spacing: 0.08em;
+    background: var(--bg);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
     text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    z-index: 90;
   }
 
   /* ── Empty state ─────────────────────────────────────────────────── */
@@ -880,10 +885,6 @@
       <button class="outline-btn" onclick="downloadCSV()">Download CSV</button>
       <button class="outline-btn danger-btn" onclick="clearDay()">Clear day</button>
     </div>
-    <div class="version-row" style="margin-top:auto;padding-top:28px">
-      <span>Version</span>
-      <span id="versionDisplay"></span>
-    </div>
   </div>
 
 </div><!-- /tab-slider -->
@@ -906,7 +907,11 @@
   <div class="cat-strip" id="categoryBtns"></div>
 </div>
 
-<!-- ── Edit overlay ───────────────────────────────────────────────── -->
+<!-- ── Version bar (Export tab only) ──────────────────────────────── -->
+<div class="version-bar" id="versionBar" style="display:none">
+  <span>Version</span>
+  <span id="versionDisplay"></span>
+</div>
 <div class="edit-overlay" id="editOverlay" onclick="overlayClick(event)">
   <div class="edit-sheet" id="editSheet">
     <div class="edit-sheet-title">Edit transaction</div>
@@ -941,7 +946,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.5.3';
+const APP_VERSION   = 'v4.5.4';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1176,8 +1181,9 @@ function switchTab(name, btn, animate = true) {
   const activePanel = document.getElementById('tab-' + name);
   if (activePanel) activePanel.scrollTop = 0;
 
-  // Entry bar only visible on Log tab
-  document.querySelector('.entry-bar').style.display = name === 'log' ? '' : 'none';
+  // Entry bar only visible on Log tab; version bar only on Export tab
+  document.querySelector('.entry-bar').style.display = name === 'log'    ? '' : 'none';
+  document.getElementById('versionBar').style.display = name === 'export' ? '' : 'none';
 
   if (name === 'history' && !historyLoaded) {
     historyLoaded = true;
