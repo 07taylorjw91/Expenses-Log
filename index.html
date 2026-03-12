@@ -847,8 +847,14 @@
     </div>
   </div>
 
+  <!-- HISTORY ──────────────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-history">
+    <div class="tx-list" id="historyList">
+      <div class="empty">Loading history…</div>
+    </div>
+  </div>
+
   <!-- EXPORT ───────────────────────────────────────────────────────── -->
-  <div class="tab-panel" id="tab-export">
   <div class="tab-panel" id="tab-export">
     <div class="notif-banner" id="notifBanner" style="display:none">
       <div class="notif-text">Enable notifications to get a 23:45 reminder before auto-send.</div>
@@ -868,13 +874,6 @@
     <div class="version-row" style="margin-top:auto;padding-top:28px">
       <span>Version</span>
       <span id="versionDisplay"></span>
-    </div>
-  </div>
-
-  <!-- HISTORY ──────────────────────────────────────────────────────── -->
-  <div class="tab-panel" id="tab-history">
-    <div class="tx-list" id="historyList">
-      <div class="empty">Loading history…</div>
     </div>
   </div>
 
@@ -933,7 +932,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.5';
+const APP_VERSION   = 'v4.5.1';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
