@@ -941,7 +941,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.5.2';
+const APP_VERSION   = 'v4.5.3';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1366,7 +1366,7 @@ function initTabSwipe(el) {
   el.addEventListener('touchstart', e => {
     if (e.target.closest('.swipe-wrapper')) return;
     const curIdx = TAB_ORDER.indexOf(getCurrentTab());
-    ts = { x: e.touches[0].clientX, y: e.touches[0].clientY, locked: false, dir: null, curIdx };
+    ts = { x: e.touches[0].clientX, y: e.touches[0].clientY, locked: false, dir: null, curIdx, t: Date.now() };
   }, { passive: true });
 
   el.addEventListener('touchmove', e => {
@@ -1379,10 +1379,10 @@ function initTabSwipe(el) {
       ts.locked = true; ts.dir = 'h';
     }
     e.preventDefault();
-    // Drag slider live — damped so a small swipe doesn't jump far
+    // Drag slider live — damped to 25% so full screen swipe = one panel width
     const baseOffset = ts.curIdx * 25;
     const vw         = el.offsetWidth;
-    let drag         = (dx / vw) * 100 * 0.55; // 0.55 damping — less sensitive
+    let drag         = (dx / vw) * 100 * 0.25;
     // Rubber-band at first/last tab
     if ((ts.curIdx === 0 && dx > 0) || (ts.curIdx === TAB_ORDER.length - 1 && dx < 0)) {
       drag = drag * 0.2;
@@ -1393,13 +1393,21 @@ function initTabSwipe(el) {
 
   el.addEventListener('touchend', e => {
     if (!ts || ts.dir !== 'h') { ts = null; return; }
-    const dx  = e.changedTouches[0].clientX - ts.x;
-    const cur = ts.curIdx;
+    const dx       = e.changedTouches[0].clientX - ts.x;
+    const dt       = Date.now() - ts.t;
+    const cur      = ts.curIdx;
     ts = null;
-    const threshold = el.offsetWidth * 0.40;
+
+    // Velocity in px/ms — fast flick needs much less travel to commit
+    const velocity        = Math.abs(dx) / Math.max(dt, 1);
+    const isFlick         = velocity > 0.3;          // ~300px/s threshold for a "flick"
+    const distThreshold   = isFlick
+      ? el.offsetWidth * 0.08   // flick: only 8% travel needed
+      : el.offsetWidth * 0.30;  // slow drag: 30% travel needed
+
     let next = cur;
-    if (dx < -threshold && cur < TAB_ORDER.length - 1) next = cur + 1;
-    if (dx >  threshold && cur > 0)                    next = cur - 1;
+    if (dx < -distThreshold && cur < TAB_ORDER.length - 1) next = cur + 1;
+    if (dx >  distThreshold && cur > 0)                    next = cur - 1;
     const btn = document.querySelectorAll('.tab')[next];
     switchTab(TAB_ORDER[next], btn, true);
   });
