@@ -143,6 +143,22 @@
     padding-bottom: 40px;
   }
 
+  /* ── Tab slide animation ─────────────────────────────────────────── */
+  .tab-slider {
+    display: flex;
+    width: 400%; /* 4 tabs */
+    will-change: transform;
+  }
+  .tab-slider .tab-panel {
+    display: block;
+    width: 25%; /* each panel = 1 screen width */
+    flex-shrink: 0;
+    min-height: 1px; /* prevent collapse */
+  }
+  .tab-slider.is-animating {
+    transition: transform 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
   /* ── Pull-to-refresh indicator ──────────────────────────────────── */
   .ptr-indicator {
     position: absolute;
@@ -790,6 +806,7 @@
 
 <div class="tab-content" id="tabContent" style="position:relative">
 <div class="ptr-indicator" id="ptrIndicator"><span class="ptr-icon">↻</span></div>
+<div class="tab-slider" id="tabSlider">
 
   <!-- LOG ──────────────────────────────────────────────────────────── -->
   <div class="tab-panel active" id="tab-log">
@@ -832,6 +849,7 @@
 
   <!-- EXPORT ───────────────────────────────────────────────────────── -->
   <div class="tab-panel" id="tab-export">
+  <div class="tab-panel" id="tab-export">
     <div class="notif-banner" id="notifBanner" style="display:none">
       <div class="notif-text">Enable notifications to get a 23:45 reminder before auto-send.</div>
       <button class="notif-allow" onclick="requestNotifPermission()">Enable</button>
@@ -860,7 +878,8 @@
     </div>
   </div>
 
-</div>
+</div><!-- /tab-slider -->
+</div><!-- /tab-content -->
 
 <!-- ── Entry bar ──────────────────────────────────────────────────── -->
 <div class="entry-bar">
@@ -914,7 +933,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.4';
+const APP_VERSION   = 'v4.5';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1133,11 +1152,21 @@ function updateSummary() {
 }
 
 // ── Core actions ──────────────────────────────────────────────────────
-function switchTab(name, btn) {
+function switchTab(name, btn, animate = true) {
+  const idx    = TAB_ORDER.indexOf(name);
+  const slider = document.getElementById('tabSlider');
+  if (slider) {
+    if (animate) slider.classList.add('is-animating');
+    slider.style.transform = `translateX(-${idx * 25}%)`;
+    if (animate) setTimeout(() => slider.classList.remove('is-animating'), 300);
+  }
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
+  // Reset scroll on the tab-content
+  const tc = document.getElementById('tabContent');
+  if (tc) tc.scrollTop = 0;
 
   // Entry bar only visible on Log tab
   document.querySelector('.entry-bar').style.display = name === 'log' ? '' : 'none';
@@ -1323,10 +1352,13 @@ function getCurrentTab() {
 }
 
 function initTabSwipe(el) {
+  const slider = document.getElementById('tabSlider');
   let ts = null;
+
   el.addEventListener('touchstart', e => {
-    if (e.target.closest('.swipe-wrapper')) return; // let tx swipes handle it
-    ts = { x: e.touches[0].clientX, y: e.touches[0].clientY, locked: false, dir: null };
+    if (e.target.closest('.swipe-wrapper')) return;
+    const curIdx = TAB_ORDER.indexOf(getCurrentTab());
+    ts = { x: e.touches[0].clientX, y: e.touches[0].clientY, locked: false, dir: null, curIdx };
   }, { passive: true });
 
   el.addEventListener('touchmove', e => {
@@ -1334,24 +1366,34 @@ function initTabSwipe(el) {
     const dx = e.touches[0].clientX - ts.x;
     const dy = e.touches[0].clientY - ts.y;
     if (!ts.locked) {
-      if (Math.abs(dy) > Math.abs(dx)) { ts.dir = 'v'; return; } // vertical — ignore
-      if (Math.abs(dx) < 12) return;                              // not moved enough yet
+      if (Math.abs(dy) > Math.abs(dx)) { ts.dir = 'v'; return; }
+      if (Math.abs(dx) < 10) return;
       ts.locked = true; ts.dir = 'h';
     }
     e.preventDefault();
+    // Drag slider live — resist at edges
+    const baseOffset = ts.curIdx * 25;
+    const vw         = el.offsetWidth;
+    let drag         = (dx / vw) * 100;
+    // Rubber-band at first/last tab
+    if ((ts.curIdx === 0 && dx > 0) || (ts.curIdx === TAB_ORDER.length - 1 && dx < 0)) {
+      drag = drag * 0.2;
+    }
+    slider.style.transition = 'none';
+    slider.style.transform  = `translateX(${-(baseOffset) + drag}%)`;
   }, { passive: false });
 
   el.addEventListener('touchend', e => {
     if (!ts || ts.dir !== 'h') { ts = null; return; }
-    const dx = e.changedTouches[0].clientX - ts.x;
+    const dx  = e.changedTouches[0].clientX - ts.x;
+    const cur = ts.curIdx;
     ts = null;
-    if (Math.abs(dx) < 50) return; // too short
-    const tabs   = TAB_ORDER;
-    const cur    = tabs.indexOf(getCurrentTab());
-    const next   = dx < 0 ? cur + 1 : cur - 1; // swipe left = next tab
-    if (next < 0 || next >= tabs.length) return;
+    const threshold = el.offsetWidth * 0.25;
+    let next = cur;
+    if (dx < -threshold && cur < TAB_ORDER.length - 1) next = cur + 1;
+    if (dx >  threshold && cur > 0)                    next = cur - 1;
     const btn = document.querySelectorAll('.tab')[next];
-    switchTab(tabs[next], btn);
+    switchTab(TAB_ORDER[next], btn, true);
   });
 }
 
@@ -1555,27 +1597,27 @@ async function loadHistory() {
     sumSnap.forEach(d => { if (d.key !== todayKey()) allDates.add(d.key); });
     txSnap.forEach(d  => { if (d.key !== todayKey()) allDates.add(d.key); });
 
-    const pastDates = [...allDates].sort().reverse().filter(date => {
-      const sum = sumByDate[date];
-      if (sum) return Math.abs(parseFloat(sum.total) || 0) > 0;
-      return (txsByDate[date] || []).length > 0;
-    });
-    if (!pastDates.length) {
-      list.innerHTML = '<div class="empty">No history yet.</div>';
-      return;
-    }
-
-    // Build summaries map
+    // Build maps first — filter references them
     const sumByDate = {};
     sumSnap.forEach(s => { sumByDate[s.key] = s.val(); });
 
-    // Build transactions map (fallback only)
     const txsByDate = {};
     txSnap.forEach(daySnap => {
       const txs = [];
       daySnap.forEach(txChild => txs.push({ ...txChild.val(), id: txChild.key, date: daySnap.key }));
       txsByDate[daySnap.key] = txs.sort((a, b) => b.id.localeCompare(a.id));
     });
+
+    const pastDates = [...allDates].sort().reverse().filter(date => {
+      const sum = sumByDate[date];
+      if (sum) return Math.abs(parseFloat(sum.total) || 0) > 0;
+      return (txsByDate[date] || []).length > 0;
+    });
+
+    if (!pastDates.length) {
+      list.innerHTML = '<div class="empty">No history yet.</div>';
+      return;
+    }
 
     list.innerHTML = pastDates.map(date => {
       const sum = sumByDate[date];
