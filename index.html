@@ -575,6 +575,115 @@
   [data-cat="payLater"] { background: #4a6fa5; }
   .cat-btn[data-cat="payLater"].active { background: #0d1320; border-color: #4a6fa5; color: #7aa3d4; }
 
+  /* ── Gift Card category colour ───────────────────────────────────── */
+  [data-cat="giftCard"] { background: #2d7a6a; }
+  .cat-btn[data-cat="giftCard"].active { background: #0d1f1c; border-color: #2d7a6a; color: #4ab5a0; }
+
+  /* ── Gift card section in Totals tab ─────────────────────────────── */
+  .gc-section-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
+  }
+  .gc-add-btn {
+    font-size: 0.55rem; color: var(--accent2);
+    background: none; border: 1px solid var(--accent2)44;
+    border-radius: 4px; padding: 2px 8px; cursor: pointer;
+    font-family: 'DM Mono', monospace; letter-spacing: 0.05em;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .gc-add-btn:active { border-color: var(--accent2); }
+  .gc-card-display {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .gc-card-header {
+    display: flex; justify-content: space-between;
+    align-items: flex-start; margin-bottom: 4px;
+  }
+  .gc-card-name {
+    font-size: 0.62rem; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+  .gc-card-bal {
+    font-family: 'Syne', sans-serif; font-size: 1.1rem;
+    font-weight: 800; letter-spacing: -0.02em;
+  }
+  .gc-bal-green { color: #2d7a54; }
+  .gc-bal-amber { color: var(--accent2); }
+  .gc-bal-red   { color: var(--danger); }
+  .gc-card-orig { font-size: 0.52rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .gc-prog-track { height: 3px; background: var(--surface2); border-radius: 2px; margin: 8px 0 5px; }
+  .gc-prog-fill  { height: 100%; border-radius: 2px; }
+  .gc-card-meta {
+    display: flex; justify-content: space-between;
+    font-size: 0.5rem; color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── Add gift card / picker bottom sheets ────────────────────────── */
+  .gc-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 200;
+    display: flex; align-items: flex-end;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .gc-overlay.open { opacity: 1; pointer-events: all; }
+  .gc-sheet {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    padding: 20px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .gc-overlay.open .gc-sheet { transform: translateY(0); }
+  .gc-sheet-title {
+    font-size: 0.55rem; text-transform: uppercase;
+    letter-spacing: 0.16em; color: var(--muted); margin-bottom: 14px;
+  }
+  .gc-field-row {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 12px;
+  }
+  .gc-field-label {
+    font-size: 0.62rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .gc-input {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 0.85rem;
+    padding: 5px 10px; outline: none; text-align: right; width: 160px;
+    transition: border-color 0.12s;
+  }
+  .gc-input:focus { border-color: #2d7a6a; }
+  .gc-picker-option {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 8px; cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .gc-picker-option:active { border-color: #2d7a6a; }
+  .gc-picker-name { font-size: 0.75rem; color: var(--text); font-family: 'DM Mono', monospace; }
+  .gc-picker-bal  { font-size: 0.85rem; color: #4ab5a0; font-family: 'DM Mono', monospace; font-weight: 500; }
+  .gc-picker-empty { font-size: 0.7rem; color: var(--muted); text-align: center; padding: 20px 0; }
+  .gc-picker-add-link {
+    text-align: center; padding: 10px 0 0;
+    font-size: 0.6rem; color: var(--accent2);
+    font-family: 'DM Mono', monospace; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+
   /* ── Pay Later dialogue (bottom sheet) ───────────────────────────── */
   .pl-overlay {
     position: fixed; inset: 0;
@@ -968,6 +1077,14 @@
     <div class="sub-card" id="subtotals">
       <div class="empty">Nothing logged yet.</div>
     </div>
+    <div class="gc-section-header" id="gcSectionHeader" style="display:none">
+      <div class="slabel" style="margin-bottom:0">Gift cards</div>
+      <button class="gc-add-btn" onclick="openAddCardSheet()">+ add card</button>
+    </div>
+    <div id="gcCardsList"></div>
+    <div id="gcNoCards" style="display:none">
+      <button class="gc-add-btn" style="width:100%;padding:10px 0;margin-top:4px;font-size:0.62rem" onclick="openAddCardSheet()">+ add your first gift card</button>
+    </div>
   </div>
 
   <!-- HISTORY ──────────────────────────────────────────────────────── -->
@@ -1021,6 +1138,34 @@
   <span>Version</span>
   <span id="versionDisplay"></span>
 </div>
+<!-- ── Gift card picker ────────────────────────────────────────────── -->
+<div class="gc-overlay" id="gcPickerOverlay" onclick="gcPickerOverlayClick(event)">
+  <div class="gc-sheet" id="gcPickerSheet">
+    <div class="gc-sheet-title">Choose gift card</div>
+    <div id="gcPickerList"></div>
+    <div class="gc-picker-add-link" onclick="openAddCardSheet(true)">+ add a new card</div>
+  </div>
+</div>
+
+<!-- ── Add gift card ───────────────────────────────────────────────── -->
+<div class="gc-overlay" id="gcAddOverlay" onclick="gcAddOverlayClick(event)">
+  <div class="gc-sheet" id="gcAddSheet">
+    <div class="gc-sheet-title">Add gift card</div>
+    <div class="gc-field-row">
+      <span class="gc-field-label">Card name</span>
+      <input class="gc-input" id="gcNameInput" type="text" placeholder="e.g. Costa Coffee" style="text-align:left">
+    </div>
+    <div class="gc-field-row">
+      <span class="gc-field-label">Balance (£)</span>
+      <input class="gc-input" id="gcBalInput" type="number" placeholder="0.00" min="0" step="0.01">
+    </div>
+    <div class="pl-btns" style="margin-top:16px">
+      <button class="edit-btn cancel" onclick="closeAddCardSheet()">Cancel</button>
+      <button class="edit-btn save"   onclick="confirmAddCard()">Add card</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Pay Later dialogue ──────────────────────────────────────────── -->
 <div class="pl-overlay" id="plOverlay" onclick="plOverlayClick(event)">
   <div class="pl-sheet" id="plSheet">
@@ -1095,8 +1240,8 @@ function setWeeklyBudget(val) {
 const WEBHOOK_URL   = 'https://hook.eu2.make.com/xzl9l96bsg9d7yg2qb3d1au6oks10hb7';
 const NOTIF_HOUR    = 23;
 const NOTIF_MIN     = 45;
-const CATEGORIES    = ['food','shopping','entertainment','other','payLater'];
-const CAT_LABELS    = { food:'Food', shopping:'Shopping', entertainment:'Entertainment', other:'Other', payLater:'Pay Later' };
+const CATEGORIES    = ['food','shopping','entertainment','other','payLater','giftCard'];
+const CAT_LABELS    = { food:'Food', shopping:'Shopping', entertainment:'Entertainment', other:'Other', payLater:'Pay Later', giftCard:'Gift Card' };
 
 // ── Firebase ─────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -1195,9 +1340,9 @@ function init() {
     strip.appendChild(btn);
   });
 
-  // Edit sheet category buttons — payLater not shown (PL transactions can't be recategorised)
+  // Edit sheet category buttons — payLater and giftCard not shown (can't be recategorised)
   const editStrip = document.getElementById('editCatStrip');
-  CATEGORIES.filter(c => c !== 'payLater').forEach(cat => {
+  CATEGORIES.filter(c => c !== 'payLater' && c !== 'giftCard').forEach(cat => {
     const btn = document.createElement('button');
     btn.className   = 'cat-btn' + (cat === editingCat ? ' active' : '');
     btn.dataset.cat = cat;
@@ -1283,10 +1428,14 @@ function updateSummary() {
   const _wd   = _d.toLocaleDateString('en-GB', { weekday: 'short' });
   const sheetDate = `${_wd},${_d.getDate()}/${_d.getMonth()+1}/${String(_d.getFullYear()).slice(2)}`;
   const notes = {};
-  CATEGORIES.filter(c => c !== 'payLater').forEach(cat => {
+  CATEGORIES.filter(c => c !== 'payLater' && c !== 'giftCard').forEach(cat => {
     const txs = [...transactions].filter(t => t.cat === cat).reverse();
     notes[cat] = txs.map(t => t.desc !== '—' ? `${t.desc} \xa3${t.amount.toFixed(2)}` : `\xa3${t.amount.toFixed(2)}`).join('\n');
   });
+  const gcTxs = [...transactions].filter(t => t.cat === 'giftCard').reverse();
+  const gcNotes = gcTxs.map(t =>
+    `${t.giftCardName || 'Gift Card'}: ${t.desc !== '—' ? t.desc + ' ' : ''}\xa3${t.amount.toFixed(2)}`
+  ).join('\n');
   const plTotal = getPayLaterTotal();
   return db.ref('summaries/' + todayKey()).set({
     date: todayKey(), sheetDate,
@@ -1300,6 +1449,7 @@ function updateSummary() {
     shopping_notes:      notes['shopping'],
     entertainment_notes: notes['entertainment'],
     other_notes:         notes['other'],
+    giftCard_notes:      gcNotes,
     updatedAt:           new Date().toISOString()
   });
 }
@@ -1332,6 +1482,7 @@ function switchTab(name, btn, animate = true) {
   if (name === 'totals' && !weeklyLoaded) {
     weeklyLoaded = true;
     loadWeeklyTotal();
+    loadGiftCards();
   }
 }
 
@@ -1358,6 +1509,11 @@ function addTransaction() {
   // Intercept Pay Later — show dialogue instead of logging directly
   if (selectedCat === 'payLater') {
     openPlSheet(amtRaw);
+    return;
+  }
+  // Intercept Gift Card — show card picker
+  if (selectedCat === 'giftCard') {
+    openGcPicker();
     return;
   }
   const rawDesc = document.getElementById('descInput').value.trim();
@@ -1521,7 +1677,6 @@ async function confirmPayLater() {
     const writes = dates.map((date, i) => {
       const key = 'sp_' + Date.now() + '_' + i;
       return db.ref('scheduled_payments/' + key).set({
-        id:           key,
         desc:         plDesc,
         totalAmount:  plAmount,
         amount:       amounts[i],
@@ -1558,11 +1713,14 @@ function deleteTransaction(id) {
 }
 
 function getTotal() {
-  // Pay Later totals go to col H separately — exclude from daily spending total
-  return transactions.filter(t => t.cat !== 'payLater').reduce((s, t) => s + t.amount, 0);
+  // Pay Later and Gift Card excluded — they don't come from bank account
+  return transactions.filter(t => t.cat !== 'payLater' && t.cat !== 'giftCard').reduce((s, t) => s + t.amount, 0);
 }
 function getPayLaterTotal() {
   return transactions.filter(t => t.cat === 'payLater').reduce((s, t) => s + t.amount, 0);
+}
+function getGiftCardTotal() {
+  return transactions.filter(t => t.cat === 'giftCard').reduce((s, t) => s + t.amount, 0);
 }
 function getSubtotals() {
   const s = {};
@@ -1869,13 +2027,13 @@ async function loadWeeklyTotal() {
     const key = dateKey(d);
     if (key === todayKey()) {
       // For today, sum locally but skip excluded
-      weekTotal += transactions.filter(t => !t.excludeWeekly && t.cat !== 'payLater').reduce((s, t) => s + t.amount, 0);
+      weekTotal += transactions.filter(t => !t.excludeWeekly && t.cat !== 'payLater' && t.cat !== 'giftCard').reduce((s, t) => s + t.amount, 0);
     } else {
       fetches.push(
         db.ref('transactions/' + key).once('value').then(snap => {
           snap.forEach(txSnap => {
             const tx = txSnap.val();
-            if (!tx.excludeWeekly && tx.cat !== 'payLater') weekTotal += tx.amount || 0;
+            if (!tx.excludeWeekly && tx.cat !== 'payLater' && tx.cat !== 'giftCard') weekTotal += tx.amount || 0;
           });
         }).catch(() => {})
       );
@@ -1912,7 +2070,186 @@ function renderWeeklyCard(weekTotal, budget) {
   }
 }
 
-// ── History ───────────────────────────────────────────────────────────
+// ── Gift Cards ────────────────────────────────────────────────────────
+let gcCards          = {};   // keyed by Firebase id
+let gcPickerFromAdd  = false; // whether picker was opened from add-card flow
+
+function gcBalClass(pct) {
+  if (pct > 0.5)  return 'gc-bal-green';
+  if (pct > 0.15) return 'gc-bal-amber';
+  return 'gc-bal-red';
+}
+function gcFillColour(pct) {
+  if (pct > 0.5)  return '#2d7a54';
+  if (pct > 0.15) return 'var(--accent2)';
+  return 'var(--danger)';
+}
+
+async function loadGiftCards() {
+  try {
+    await auth.signInAnonymously().catch(() => {});
+    const snap = await db.ref('gift_cards').once('value');
+    gcCards = snap.val() || {};
+    renderGiftCards();
+  } catch(e) { gcCards = {}; renderGiftCards(); }
+}
+
+function renderGiftCards() {
+  const header = document.getElementById('gcSectionHeader');
+  const list   = document.getElementById('gcCardsList');
+  const noCards = document.getElementById('gcNoCards');
+  const cards  = Object.entries(gcCards);
+
+  if (!cards.length) {
+    header.style.display  = 'none';
+    list.innerHTML        = '';
+    noCards.style.display = 'block';
+    return;
+  }
+  header.style.display  = 'flex';
+  noCards.style.display = 'none';
+
+  list.innerHTML = cards.map(([id, card]) => {
+    const pct     = card.currentBalance / card.initialBalance;
+    const pctPct  = Math.max(0, Math.min(100, pct * 100)).toFixed(0);
+    const balCls  = gcBalClass(pct);
+    const fillCol = gcFillColour(pct);
+    const almostEmpty = pct <= 0.15;
+    return `<div class="gc-card-display">
+      <div class="gc-card-header">
+        <div>
+          <div class="gc-card-name">${esc(card.name)}</div>
+          <div class="gc-card-orig">of ${fmt(card.initialBalance)} · added ${card.addedDate || ''}</div>
+        </div>
+        <div class="gc-card-bal ${balCls}">${fmt(card.currentBalance)}</div>
+      </div>
+      <div class="gc-prog-track"><div class="gc-prog-fill" style="width:${pctPct}%;background:${fillCol}"></div></div>
+      <div class="gc-card-meta">
+        <span style="${almostEmpty ? 'color:var(--danger)' : ''}">${almostEmpty ? 'almost empty' : pctPct + '% remaining'}</span>
+        <span>${(card.useCount || 0)} use${(card.useCount || 0) === 1 ? '' : 's'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Gift card picker ──────────────────────────────────────────────────
+function openGcPicker() {
+  gcPickerFromAdd = false;
+  const list  = document.getElementById('gcPickerList');
+  const cards = Object.entries(gcCards);
+  if (!cards.length) {
+    list.innerHTML = '<div class="gc-picker-empty">No gift cards registered yet.</div>';
+  } else {
+    list.innerHTML = cards.map(([id, card]) =>
+      `<div class="gc-picker-option" onclick="selectGiftCard('${id}')">
+        <span class="gc-picker-name">${esc(card.name)}</span>
+        <span class="gc-picker-bal">${fmt(card.currentBalance)}</span>
+      </div>`
+    ).join('');
+  }
+  document.getElementById('gcPickerOverlay').classList.add('open');
+}
+function closeGcPicker() {
+  document.getElementById('gcPickerOverlay').classList.remove('open');
+}
+function gcPickerOverlayClick(e) {
+  if (e.target === document.getElementById('gcPickerOverlay')) closeGcPicker();
+}
+
+async function selectGiftCard(id) {
+  closeGcPicker();
+  const card   = gcCards[id];
+  if (!card) return;
+  const amtRaw = parseFloat(document.getElementById('amountInput').value);
+  if (!amtRaw || amtRaw <= 0) return;
+  const rawDesc = document.getElementById('descInput').value.trim();
+  const desc    = rawDesc ? toTitleCase(rawDesc) : '—';
+  const tx = {
+    id:         Date.now().toString(),
+    amount:     amtRaw,
+    desc,
+    cat:        'giftCard',
+    giftCardId: id,
+    giftCardName: card.name,
+    date:       todayKey(),
+    time:       new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  };
+  transactions.unshift(tx);
+  render();
+  document.getElementById('amountInput').value = '';
+  document.getElementById('descInput').value   = '';
+  document.getElementById('amountInput').focus();
+
+  if (!isOnline) { queuePending(tx); return; }
+  setSyncStatus('syncing', 'Saving…');
+  try {
+    await writeTransaction(tx);
+    // Deduct from card balance and increment use count
+    const newBal = Math.max(0, card.currentBalance - amtRaw);
+    await db.ref('gift_cards/' + id).update({
+      currentBalance: Math.round(newBal * 100) / 100,
+      useCount: (card.useCount || 0) + 1
+    });
+    // Update local cache and re-render cards
+    gcCards[id].currentBalance = Math.round(newBal * 100) / 100;
+    gcCards[id].useCount = (card.useCount || 0) + 1;
+    renderGiftCards();
+    setSyncStatus('synced', 'Synced ✓');
+  } catch(e) {
+    setSyncStatus('error', 'Save failed');
+    queuePending(tx);
+  }
+}
+
+// ── Add card sheet ────────────────────────────────────────────────────
+function openAddCardSheet(fromPicker = false) {
+  gcPickerFromAdd = fromPicker;
+  if (fromPicker) closeGcPicker();
+  document.getElementById('gcNameInput').value = '';
+  document.getElementById('gcBalInput').value  = '';
+  document.getElementById('gcAddOverlay').classList.add('open');
+  setTimeout(() => document.getElementById('gcNameInput').focus(), 300);
+}
+function closeAddCardSheet() {
+  document.getElementById('gcAddOverlay').classList.remove('open');
+}
+function gcAddOverlayClick(e) {
+  if (e.target === document.getElementById('gcAddOverlay')) closeAddCardSheet();
+}
+
+async function confirmAddCard() {
+  const name = document.getElementById('gcNameInput').value.trim();
+  const bal  = parseFloat(document.getElementById('gcBalInput').value);
+  if (!name) {
+    document.getElementById('gcNameInput').style.borderColor = 'var(--danger)';
+    setTimeout(() => document.getElementById('gcNameInput').style.borderColor = '', 400);
+    return;
+  }
+  if (!bal || bal <= 0) {
+    document.getElementById('gcBalInput').style.borderColor = 'var(--danger)';
+    setTimeout(() => document.getElementById('gcBalInput').style.borderColor = '', 400);
+    return;
+  }
+  closeAddCardSheet();
+  const id   = 'gc_' + Date.now();
+  const card = {
+    name,
+    initialBalance:  Math.round(bal * 100) / 100,
+    currentBalance:  Math.round(bal * 100) / 100,
+    addedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+    useCount: 0,
+    createdAt: new Date().toISOString()
+  };
+  try {
+    await db.ref('gift_cards/' + id).set(card);
+    gcCards[id] = card;
+    renderGiftCards();
+    // If opened from the picker flow, re-open the picker now the card exists
+    if (gcPickerFromAdd) openGcPicker();
+  } catch(e) {
+    setSyncStatus('error', 'Failed to save card');
+  }
+}
 async function loadHistory() {
   const list = document.getElementById('historyList');
   list.innerHTML = '<div class="empty">Loading history…</div>';
@@ -2093,8 +2430,8 @@ function render() {
       [...transactions].reverse().map(t =>
         `  ${t.time}  ${CAT_LABELS[t.cat].padEnd(16)}${fmt(t.amount)}  ${t.desc}`).join('\n');
 
-  // Refresh weekly if already loaded
-  if (weeklyLoaded) loadWeeklyTotal();
+  // Refresh weekly and gift cards if already loaded
+  if (weeklyLoaded) { loadWeeklyTotal(); loadGiftCards(); }
 }
 
 // ── Status helpers ────────────────────────────────────────────────────
