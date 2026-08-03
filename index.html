@@ -386,6 +386,7 @@
     align-items: center;
     border-radius: 12px;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.1s;
   }
   .swipe-wrapper.is-swiping .swipe-bg { opacity: 1; }
@@ -1252,7 +1253,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.9.1';
+const APP_VERSION   = 'v4.9.2';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
