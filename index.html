@@ -1166,6 +1166,29 @@
   </div>
 </div>
 
+<!-- ── Edit gift card ──────────────────────────────────────────────── -->
+<div class="gc-overlay" id="gcEditOverlay" onclick="gcEditOverlayClick(event)">
+  <div class="gc-sheet" id="gcEditSheet">
+    <div class="gc-sheet-title">Edit gift card</div>
+    <div class="gc-field-row">
+      <span class="gc-field-label">Card name</span>
+      <input class="gc-input" id="gcEditNameInput" type="text" placeholder="e.g. Costa Coffee" style="text-align:left">
+    </div>
+    <div class="gc-field-row">
+      <span class="gc-field-label">Current balance (£)</span>
+      <input class="gc-input" id="gcEditBalInput" type="number" placeholder="0.00" min="0" step="0.01">
+    </div>
+    <div class="gc-field-row">
+      <span class="gc-field-label">Initial balance (£)</span>
+      <input class="gc-input" id="gcEditInitBalInput" type="number" placeholder="0.00" min="0" step="0.01">
+    </div>
+    <div class="pl-btns" style="margin-top:16px">
+      <button class="edit-btn cancel" onclick="closeGcEditSheet()">Cancel</button>
+      <button class="edit-btn save"   onclick="confirmGcEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Pay Later dialogue ──────────────────────────────────────────── -->
 <div class="pl-overlay" id="plOverlay" onclick="plOverlayClick(event)">
   <div class="pl-sheet" id="plSheet">
@@ -1229,7 +1252,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.8';
+const APP_VERSION   = 'v4.7';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -2110,26 +2133,142 @@ function renderGiftCards() {
   noCards.style.display = 'none';
 
   list.innerHTML = cards.map(([id, card]) => {
-    const pct     = card.currentBalance / card.initialBalance;
-    const pctPct  = Math.max(0, Math.min(100, pct * 100)).toFixed(0);
-    const balCls  = gcBalClass(pct);
-    const fillCol = gcFillColour(pct);
+    const pct      = card.currentBalance / card.initialBalance;
+    const pctPct   = Math.max(0, Math.min(100, pct * 100)).toFixed(0);
+    const balCls   = gcBalClass(pct);
+    const fillCol  = gcFillColour(pct);
     const almostEmpty = pct <= 0.15;
-    return `<div class="gc-card-display">
-      <div class="gc-card-header">
-        <div>
-          <div class="gc-card-name">${esc(card.name)}</div>
-          <div class="gc-card-orig">of ${fmt(card.initialBalance)} · added ${card.addedDate || ''}</div>
+    return `<div class="swipe-wrapper gc-swipe-wrapper" data-gcid="${id}">
+      <div class="swipe-bg swipe-bg-delete">🗑</div>
+      <div class="swipe-bg swipe-bg-edit">✎</div>
+      <div class="gc-card-display gc-swipe-item">
+        <div class="gc-card-header">
+          <div>
+            <div class="gc-card-name">${esc(card.name)}</div>
+            <div class="gc-card-orig">of ${fmt(card.initialBalance)} · added ${card.addedDate || ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button class="tx-edit-btn" onclick="openGcEditSheet('${id}')" title="Edit">✎</button>
+            <button class="tx-del-btn"  onclick="deleteGiftCard('${id}')"  title="Delete">×</button>
+            <div class="gc-card-bal ${balCls}">${fmt(card.currentBalance)}</div>
+          </div>
         </div>
-        <div class="gc-card-bal ${balCls}">${fmt(card.currentBalance)}</div>
-      </div>
-      <div class="gc-prog-track"><div class="gc-prog-fill" style="width:${pctPct}%;background:${fillCol}"></div></div>
-      <div class="gc-card-meta">
-        <span style="${almostEmpty ? 'color:var(--danger)' : ''}">${almostEmpty ? 'almost empty' : pctPct + '% remaining'}</span>
-        <span>${(card.useCount || 0)} use${(card.useCount || 0) === 1 ? '' : 's'}</span>
+        <div class="gc-prog-track"><div class="gc-prog-fill" style="width:${pctPct}%;background:${fillCol}"></div></div>
+        <div class="gc-card-meta">
+          <span style="${almostEmpty ? 'color:var(--danger)' : ''}">${almostEmpty ? 'almost empty' : pctPct + '% remaining'}</span>
+          <span>${(card.useCount || 0)} use${(card.useCount || 0) === 1 ? '' : 's'}</span>
+        </div>
       </div>
     </div>`;
   }).join('');
+
+  // Attach swipe handler each time cards are re-rendered
+  initGcSwipe(list);
+}
+
+// ── Gift card swipe ───────────────────────────────────────────────────
+let gcSwipe = {};
+function initGcSwipe(container) {
+  container.addEventListener('touchstart', e => {
+    const wrapper = e.target.closest('.gc-swipe-wrapper');
+    if (!wrapper) return;
+    gcSwipe = {
+      el: wrapper.querySelector('.gc-swipe-item'),
+      id: wrapper.dataset.gcid,
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      dx: 0, locked: false
+    };
+  }, { passive: true });
+
+  container.addEventListener('touchmove', e => {
+    if (!gcSwipe.el) return;
+    const dx = e.touches[0].clientX - gcSwipe.startX;
+    const dy = e.touches[0].clientY - gcSwipe.startY;
+    if (!gcSwipe.locked) {
+      if (Math.abs(dy) > Math.abs(dx)) { gcSwipe.el = null; return; }
+      gcSwipe.locked = true;
+    }
+    e.preventDefault();
+    gcSwipe.dx = dx;
+    const clamped = Math.max(-90, Math.min(90, dx));
+    gcSwipe.el.style.transition = 'none';
+    gcSwipe.el.style.transform  = `translateX(${clamped}px)`;
+    gcSwipe.el.closest('.gc-swipe-wrapper').classList.add('is-swiping');
+  }, { passive: false });
+
+  container.addEventListener('touchend', () => {
+    if (!gcSwipe.el) return;
+    const { dx, id, el } = gcSwipe;
+    el.closest('.gc-swipe-wrapper').classList.remove('is-swiping');
+    el.style.transition = 'transform 0.2s ease';
+    el.style.transform  = '';
+    gcSwipe.el = null;
+    if (dx >  65) deleteGiftCard(id);
+    if (dx < -65) openGcEditSheet(id);
+  });
+}
+
+// ── Gift card edit ────────────────────────────────────────────────────
+let gcEditingId = null;
+
+function openGcEditSheet(id) {
+  const card = gcCards[id];
+  if (!card) return;
+  gcEditingId = id;
+  document.getElementById('gcEditNameInput').value    = card.name;
+  document.getElementById('gcEditBalInput').value     = card.currentBalance.toFixed(2);
+  document.getElementById('gcEditInitBalInput').value = card.initialBalance.toFixed(2);
+  document.getElementById('gcEditOverlay').classList.add('open');
+}
+function closeGcEditSheet() {
+  document.getElementById('gcEditOverlay').classList.remove('open');
+  gcEditingId = null;
+}
+function gcEditOverlayClick(e) {
+  if (e.target === document.getElementById('gcEditOverlay')) closeGcEditSheet();
+}
+
+async function confirmGcEdit() {
+  if (!gcEditingId) return;
+  const name    = document.getElementById('gcEditNameInput').value.trim();
+  const curBal  = parseFloat(document.getElementById('gcEditBalInput').value);
+  const initBal = parseFloat(document.getElementById('gcEditInitBalInput').value);
+  if (!name) {
+    document.getElementById('gcEditNameInput').style.borderColor = 'var(--danger)';
+    setTimeout(() => document.getElementById('gcEditNameInput').style.borderColor = '', 400);
+    return;
+  }
+  if (isNaN(curBal) || curBal < 0) {
+    document.getElementById('gcEditBalInput').style.borderColor = 'var(--danger)';
+    setTimeout(() => document.getElementById('gcEditBalInput').style.borderColor = '', 400);
+    return;
+  }
+  const updates = {
+    name,
+    currentBalance: Math.round(curBal * 100) / 100,
+    initialBalance: (!isNaN(initBal) && initBal > 0)
+      ? Math.round(initBal * 100) / 100
+      : gcCards[gcEditingId].initialBalance
+  };
+  closeGcEditSheet();
+  try {
+    await db.ref('gift_cards/' + gcEditingId).update(updates);
+    gcCards[gcEditingId] = { ...gcCards[gcEditingId], ...updates };
+    renderGiftCards();
+    setSyncStatus('synced', 'Synced ✓');
+  } catch(e) { setSyncStatus('error', 'Save failed'); }
+}
+
+async function deleteGiftCard(id) {
+  if (!gcCards[id]) return;
+  if (!confirm(`Delete "${gcCards[id].name}"? This won't undo any logged transactions.`)) return;
+  try {
+    await db.ref('gift_cards/' + id).remove();
+    delete gcCards[id];
+    renderGiftCards();
+    setSyncStatus('synced', 'Synced ✓');
+  } catch(e) { setSyncStatus('error', 'Delete failed'); }
 }
 
 // ── Gift card picker ──────────────────────────────────────────────────
