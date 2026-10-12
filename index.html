@@ -580,6 +580,11 @@
   [data-cat="giftCard"] { background: #2d7a6a; }
   .cat-btn[data-cat="giftCard"].active { background: #0d1f1c; border-color: #2d7a6a; color: #4ab5a0; }
 
+  /* ── Money In (income) ───────────────────────────────────────────── */
+  .cat-dot[data-cat="income"] { background: #3fa066; }
+  .cat-btn[data-cat="income"].active { background: #0d1f14; border-color: #3fa066; color: #5fd08a; }
+  .tx-amt.income, .sub-amt.income { color: #3fa066; }
+
   /* ── Gift card section in Totals tab ─────────────────────────────── */
   .gc-section-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -1253,7 +1258,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v4.9.2';
+const APP_VERSION   = 'v5.0';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1264,8 +1269,8 @@ function setWeeklyBudget(val) {
 const WEBHOOK_URL   = 'https://hook.eu2.make.com/xzl9l96bsg9d7yg2qb3d1au6oks10hb7';
 const NOTIF_HOUR    = 23;
 const NOTIF_MIN     = 45;
-const CATEGORIES    = ['food','shopping','entertainment','other','payLater','giftCard'];
-const CAT_LABELS    = { food:'Food', shopping:'Shopping', entertainment:'Entertainment', other:'Other', payLater:'Pay Later', giftCard:'Gift Card' };
+const CATEGORIES    = ['food','shopping','entertainment','other','payLater','giftCard','income'];
+const CAT_LABELS    = { food:'Food', shopping:'Shopping', entertainment:'Entertainment', other:'Other', payLater:'Pay Later', giftCard:'Gift Card', income:'Money In' };
 
 // ── Firebase ─────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -1297,6 +1302,7 @@ let notifTimer      = null;
 // ── Helpers ───────────────────────────────────────────────────────────
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 function fmt(n)     { return '£' + n.toFixed(2); }
+function fmtTx(t)   { return (t.cat === 'income' ? '+' : '') + fmt(t.amount); }
 function fmtNum(n)  { return n > 0 ? (-n).toFixed(2) : ''; }
 function esc(s)     { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function toTitleCase(s) { return s.replace(/\b\w/g, c => c.toUpperCase()); }
@@ -1364,9 +1370,9 @@ function init() {
     strip.appendChild(btn);
   });
 
-  // Edit sheet category buttons — payLater and giftCard not shown (can't be recategorised)
+  // Edit sheet category buttons — payLater, giftCard and income not shown (can't be recategorised)
   const editStrip = document.getElementById('editCatStrip');
-  CATEGORIES.filter(c => c !== 'payLater' && c !== 'giftCard').forEach(cat => {
+  CATEGORIES.filter(c => c !== 'payLater' && c !== 'giftCard' && c !== 'income').forEach(cat => {
     const btn = document.createElement('button');
     btn.className   = 'cat-btn' + (cat === editingCat ? ' active' : '');
     btn.dataset.cat = cat;
@@ -1460,7 +1466,8 @@ function updateSummary() {
   const gcNotes = gcTxs.map(t =>
     `${t.giftCardName || 'Gift Card'}: ${t.desc !== '—' ? t.desc + ' ' : ''}\xa3${t.amount.toFixed(2)}`
   ).join('\n');
-  const plTotal = getPayLaterTotal();
+  const plTotal  = getPayLaterTotal();
+  const incTotal = getIncomeTotal();
   return db.ref('summaries/' + todayKey()).set({
     date: todayKey(), sheetDate,
     food:                subs['food']          > 0 ? (-subs['food']).toFixed(2)          : '',
@@ -1468,12 +1475,14 @@ function updateSummary() {
     entertainment:       subs['entertainment'] > 0 ? (-subs['entertainment']).toFixed(2) : '',
     other:               subs['other']         > 0 ? (-subs['other']).toFixed(2)         : '',
     payLater:            plTotal               > 0 ? (-plTotal).toFixed(2)               : '',
+    income:              incTotal              > 0 ? incTotal.toFixed(2)                 : '',
     total:               total > 0 ? (-total).toFixed(2) : '',
     food_notes:          notes['food'],
     shopping_notes:      notes['shopping'],
     entertainment_notes: notes['entertainment'],
     other_notes:         notes['other'],
     giftCard_notes:      gcNotes,
+    income_notes:        notes['income'] || '',
     updatedAt:           new Date().toISOString()
   });
 }
@@ -1513,6 +1522,7 @@ function switchTab(name, btn, animate = true) {
 function selectCat(cat) {
   selectedCat = cat;
   document.querySelectorAll('#categoryBtns .cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+  document.getElementById('descInput').placeholder = cat === 'income' ? 'Source (e.g. PayPal reward)' : 'Description (optional)';
   renderShortcuts();
 }
 
@@ -1737,8 +1747,11 @@ function deleteTransaction(id) {
 }
 
 function getTotal() {
-  // Pay Later and Gift Card excluded — they don't come from bank account
-  return transactions.filter(t => t.cat !== 'payLater' && t.cat !== 'giftCard').reduce((s, t) => s + t.amount, 0);
+  // Pay Later, Gift Card and Money In excluded — daily total is spending out of the bank account only
+  return transactions.filter(t => t.cat !== 'payLater' && t.cat !== 'giftCard' && t.cat !== 'income').reduce((s, t) => s + t.amount, 0);
+}
+function getIncomeTotal() {
+  return transactions.filter(t => t.cat === 'income').reduce((s, t) => s + t.amount, 0);
 }
 function getPayLaterTotal() {
   return transactions.filter(t => t.cat === 'payLater').reduce((s, t) => s + t.amount, 0);
@@ -2051,13 +2064,13 @@ async function loadWeeklyTotal() {
     const key = dateKey(d);
     if (key === todayKey()) {
       // For today, sum locally but skip excluded
-      weekTotal += transactions.filter(t => !t.excludeWeekly && t.cat !== 'payLater' && t.cat !== 'giftCard').reduce((s, t) => s + t.amount, 0);
+      weekTotal += transactions.filter(t => !t.excludeWeekly && t.cat !== 'payLater' && t.cat !== 'giftCard' && t.cat !== 'income').reduce((s, t) => s + t.amount, 0);
     } else {
       fetches.push(
         db.ref('transactions/' + key).once('value').then(snap => {
           snap.forEach(txSnap => {
             const tx = txSnap.val();
-            if (!tx.excludeWeekly && tx.cat !== 'payLater' && tx.cat !== 'giftCard') weekTotal += tx.amount || 0;
+            if (!tx.excludeWeekly && tx.cat !== 'payLater' && tx.cat !== 'giftCard' && tx.cat !== 'income') weekTotal += tx.amount || 0;
           });
         }).catch(() => {})
       );
@@ -2465,7 +2478,7 @@ async function loadHistory() {
             <div class="tx-desc">${esc(t.desc)}</div>
             <div class="tx-meta">${CAT_LABELS[t.cat] || t.cat}${t.time ? ' · ' + t.time : ''}${t.cat === 'payLater' && t.plInstalments ? ' · ' + t.plInstalments + ' payments' : ''}</div>
           </div>
-          <div class="tx-amt">${fmt(t.amount)}</div>
+          <div class="tx-amt${t.cat === 'income' ? ' income' : ''}">${fmtTx(t)}</div>
         </div>`).join('');
 
       // Build scheduled payments block for any PL transactions on this date
@@ -2542,7 +2555,7 @@ function render() {
           ${t.excludeWeekly ? '<div class="tx-excluded-badge">excl.</div>' : ''}
           <button class="tx-edit-btn" onclick="openEditSheet('${t.id}')" title="Edit">✎</button>
           <button class="tx-del-btn"  onclick="deleteTransaction('${t.id}')" title="Delete">×</button>
-          <div class="tx-amt">${fmt(t.amount)}</div>
+          <div class="tx-amt${t.cat === 'income' ? ' income' : ''}">${fmtTx(t)}</div>
         </div>
       </div>`).join('');
   }
@@ -2555,7 +2568,7 @@ function render() {
         <div class="sub-row">
           <div class="cat-dot" data-cat="${c}"></div>
           <div class="sub-cat">${CAT_LABELS[c]}</div>
-          <div class="sub-amt">${fmt(subs[c])}</div>
+          <div class="sub-amt${c === 'income' ? ' income' : ''}">${c === 'income' ? '+' : ''}${fmt(subs[c])}</div>
         </div>`).join('');
 
   // Export box
@@ -2565,10 +2578,10 @@ function render() {
     ? 'Log transactions to generate your row.'
     : `SHEET ROW (tab-separated):\nFood\tShopping\tEntertainment\tOther\n${f}\t${s}\t${e}\t${o}\n\n` +
       `─────────────────────────\n` +
-      activeCats.map(c => `  ${CAT_LABELS[c].padEnd(16)}${fmt(subs[c])}`).join('\n') +
+      activeCats.map(c => `  ${CAT_LABELS[c].padEnd(16)}${c === 'income' ? '+' : ''}${fmt(subs[c])}`).join('\n') +
       `\n  ${'TOTAL'.padEnd(16)}${fmt(total)}\n\nTransactions (${transactions.length}):\n` +
       [...transactions].reverse().map(t =>
-        `  ${t.time}  ${CAT_LABELS[t.cat].padEnd(16)}${fmt(t.amount)}  ${t.desc}`).join('\n');
+        `  ${t.time}  ${CAT_LABELS[t.cat].padEnd(16)}${fmtTx(t)}  ${t.desc}`).join('\n');
 
   // Refresh weekly and gift cards if already loaded
   if (weeklyLoaded) { loadWeeklyTotal(); loadGiftCards(); }
@@ -2598,6 +2611,7 @@ async function sendToSheet() {
     shopping:      subs['shopping']      > 0 ? (-subs['shopping']).toFixed(2)      : '',
     entertainment: subs['entertainment'] > 0 ? (-subs['entertainment']).toFixed(2) : '',
     other:         subs['other']         > 0 ? (-subs['other']).toFixed(2)         : '',
+    income:        subs['income']        > 0 ? subs['income'].toFixed(2)           : '',
     total:         total > 0 ? (-total).toFixed(2) : ''
   };
   showBanner('sending', '⏳ Sending to Google Sheet…');
@@ -2626,7 +2640,7 @@ function downloadCSV() {
   const subs    = getSubtotals();
   const rows = [
     ['Date','Time','Category','Description','Amount'],
-    ...[...transactions].reverse().map(t => [dateStr, t.time, CAT_LABELS[t.cat], t.desc, (-t.amount).toFixed(2)]),
+    ...[...transactions].reverse().map(t => [dateStr, t.time, CAT_LABELS[t.cat], t.desc, (t.cat === 'income' ? t.amount : -t.amount).toFixed(2)]),
     [], ['--- DAILY SUMMARY ---'],
     ['Date','Food','Shopping','Entertainment','Other'],
     [dateStr, fmtNum(subs['food']), fmtNum(subs['shopping']), fmtNum(subs['entertainment']), fmtNum(subs['other'])]
