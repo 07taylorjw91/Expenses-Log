@@ -771,6 +771,40 @@
   .pl-inst-badge.tonight { background: #1a1508; color: var(--accent); border: 1px solid var(--accent2)44; }
   .pl-inst-badge.nextyear { background: #1a1208; color: #c87a3a; border: 1px solid #c87a3a44; }
   .pl-btns { display: flex; gap: 8px; }
+  .pl-sheet { max-height: 92vh; overflow-y: auto; }
+
+  /* Editable instalment rows */
+  .pl-inst-row { gap: 8px; }
+  .pl-date-input, .pl-amt-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    padding: 6px 8px;
+    outline: none;
+    color-scheme: light dark;
+    min-width: 0;
+    transition: border-color 0.12s;
+  }
+  .pl-date-input { flex: 1; }
+  .pl-date-input:focus, .pl-amt-input:focus { border-color: #7aa3d4; }
+  .pl-amt-wrap   { display: flex; align-items: center; gap: 4px; width: 100px; flex-shrink: 0; }
+  .pl-amt-prefix { color: var(--muted); }
+  .pl-amt-input  { width: 100%; text-align: right; }
+  .pl-status {
+    font-family: 'DM Mono', monospace; font-size: 0.62rem;
+    text-align: right; margin: 2px 0 10px; letter-spacing: 0.04em;
+  }
+  .pl-status.ok  { color: var(--success); }
+  .pl-status.bad { color: var(--danger); }
+  .pl-hint { font-size: 0.55rem; color: var(--muted); line-height: 1.6; margin-bottom: 14px; }
+  .pl-reset {
+    background: none; border: none; padding: 0; cursor: pointer;
+    color: #7aa3d4; font: inherit; text-decoration: underline;
+  }
+  .edit-btn.save:disabled { opacity: 0.35; cursor: not-allowed; }
 
   /* Scheduled payments block in History */
   .pl-sched-block {
@@ -1217,9 +1251,15 @@
     </div>
     <hr class="pl-divider">
     <div class="pl-instalments" id="plInstalments"></div>
+    <div class="pl-status" id="plStatus"></div>
+    <div class="pl-hint">
+      Tap a date or amount to change it. Editing a payment re-balances the last one so the total still adds up.
+      Changing the instalments or interval resets the schedule.
+      <button class="pl-reset" onclick="plResetDefaults()">Reset to defaults</button>
+    </div>
     <div class="pl-btns">
       <button class="edit-btn cancel" onclick="closePlSheet()">Cancel</button>
-      <button class="edit-btn save"   onclick="confirmPayLater()">Confirm &amp; Log</button>
+      <button class="edit-btn save"   id="plConfirmBtn" onclick="confirmPayLater()">Confirm &amp; Log</button>
     </div>
   </div>
 </div>
@@ -1258,7 +1298,7 @@
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────
-const APP_VERSION   = 'v5.0';
+const APP_VERSION   = 'v5.1';
 const WEEKLY_BUDGET_DEFAULT = 100;
 function getWeeklyBudget() {
   return parseFloat(localStorage.getItem('spendlog_weekly_budget') || WEEKLY_BUDGET_DEFAULT);
@@ -1575,83 +1615,128 @@ function addTransaction() {
 }
 
 // ── Pay Later dialogue ────────────────────────────────────────────────
-let plAmount       = 0;
+// Dates are plain 'YYYY-MM-DD' strings and money is held in whole pence, so the
+// schedule never depends on the device's time zone or on float rounding.
+let plTotalPence   = 0;
 let plInstalments  = 3;
 let plIntervalType = 'monthly'; // 'monthly' | '30d'
 let plDesc         = '—';
+let plRows         = [];        // [{ date, pence, dateEdited, amtEdited }]
 
-function plAddMonths(date, months) {
-  const d = new Date(date);
-  const day = d.getDate();
-  d.setMonth(d.getMonth() + months);
-  // Clamp to last day of month if date overflowed (e.g. Jan 31 + 1m = Feb 28)
-  if (d.getDate() < day) d.setDate(0);
-  return d;
+function plKey(y, m, d) {
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+function plLocalToday() {
+  const d = new Date();
+  return plKey(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+function plParts(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return { y, m, d };
+}
+function plDaysInMonth(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); } // m = 1..12
+function plAddMonthsKey(key, n) {
+  const { y, m, d } = plParts(key);
+  const idx = y * 12 + (m - 1) + n;
+  const ny  = Math.floor(idx / 12);
+  const nm  = (idx % 12) + 1;
+  return plKey(ny, nm, Math.min(d, plDaysInMonth(ny, nm))); // 31 Jan + 1 month = end of Feb
+}
+function plAddDaysKey(key, n) {
+  const { y, m, d } = plParts(key);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return plKey(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+}
+function plDefaultPence(total, n) {
+  const base = Math.floor(total / n);
+  return Array.from({ length: n }, (_, i) => i === 0 ? base + (total - base * n) : base);
+}
+function plDefaultDate(first, i) {
+  if (i === 0) return first;
+  return plIntervalType === 'monthly' ? plAddMonthsKey(first, i) : plAddDaysKey(first, i * 30);
+}
+function plBuildRows(firstDate) {
+  const pence = plDefaultPence(plTotalPence, plInstalments);
+  plRows = pence.map((p, i) => ({
+    date: plDefaultDate(firstDate, i), pence: p, dateEdited: false, amtEdited: false
+  }));
 }
 
-function plCalcDates() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dates = [];
-  for (let i = 0; i < plInstalments; i++) {
-    if (plIntervalType === 'monthly') {
-      dates.push(plAddMonths(today, i));
-    } else {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i * 30);
-      dates.push(d);
-    }
-  }
-  return dates;
-}
-
-function plCalcAmounts(total, n) {
-  const base      = Math.floor((total * 100) / n) / 100;
-  const remainder = Math.round((total - base * n) * 100) / 100;
-  return Array.from({ length: n }, (_, i) => i === 0 ? base + remainder : base);
-}
-
-function plFmtDate(date) {
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function plIsNextYear(date) {
-  return date.getFullYear() > new Date().getFullYear();
-}
-
-function plRenderInstalments() {
-  const dates   = plCalcDates();
-  const amounts = plCalcAmounts(plAmount, plInstalments);
-  const today   = new Date(); today.setHours(0,0,0,0);
-  const el      = document.getElementById('plInstalments');
-  el.innerHTML  = dates.map((date, i) => {
-    const isToday   = date.getTime() === today.getTime();
-    const nextYear  = plIsNextYear(date);
-    const amtClass  = isToday ? 'today' : 'future';
-    const badge     = isToday
-      ? '<span class="pl-inst-badge tonight">tonight</span>'
-      : nextYear
-        ? '<span class="pl-inst-badge nextyear">next year</span>'
-        : '<span class="pl-inst-badge tonight" style="background:var(--surface2);color:var(--muted);border-color:var(--border)">tonight</span>';
-    return `<div class="pl-inst-row">
+function plRenderRows() {
+  document.getElementById('plInstalments').innerHTML = plRows.map((r, i) => `
+    <div class="pl-inst-row">
       <span class="pl-inst-num">${i + 1}</span>
-      <span class="pl-inst-date">${plFmtDate(date)}${isToday ? ' <span style="color:var(--muted);font-size:0.55rem">(today)</span>' : ''}</span>
-      <span class="pl-inst-amt ${amtClass}">${fmt(amounts[i])}</span>
-      ${badge}
-    </div>`;
-  }).join('');
+      <input class="pl-date-input" type="date" id="plDate${i}" value="${r.date}" onchange="plDateChanged(${i}, this.value)">
+      <span class="pl-amt-wrap">
+        <span class="pl-amt-prefix">£</span>
+        <input class="pl-amt-input" type="number" inputmode="decimal" step="0.01" min="0" id="plAmt${i}" value="${(r.pence / 100).toFixed(2)}" onchange="plAmtChanged(${i}, this.value)">
+      </span>
+    </div>`).join('');
+  plUpdateStatus();
+}
+
+// Refresh the values of the existing inputs without rebuilding them (keeps Tab/focus intact)
+function plSyncInputs() {
+  plRows.forEach((r, i) => {
+    const d = document.getElementById('plDate' + i);
+    const a = document.getElementById('plAmt'  + i);
+    if (d) d.value = r.date;
+    if (a) a.value = (r.pence / 100).toFixed(2);
+  });
+  plUpdateStatus();
+}
+
+function plDateChanged(i, value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) { plSyncInputs(); return; } // cleared: put the old date back
+  plRows[i].date       = value;
+  plRows[i].dateEdited = true;
+  if (i === 0) {
+    // Later payments you haven't edited by hand keep following the first date
+    plRows.forEach((r, j) => { if (j > 0 && !r.dateEdited) r.date = plDefaultDate(value, j); });
+  }
+  plSyncInputs();
+}
+
+function plAmtChanged(i, value) {
+  const pence = Math.round(parseFloat(value) * 100);
+  if (!isFinite(pence) || pence <= 0) { plSyncInputs(); return; } // blank / zero / junk: restore
+  plRows[i].pence      = pence;
+  plRows[i].amtEdited  = true;
+  const last = plRows.length - 1;
+  if (i !== last && !plRows[last].amtEdited) {
+    // Re-balance the last payment so the total stays exact
+    const others = plRows.slice(0, last).reduce((s, r) => s + r.pence, 0);
+    plRows[last].pence = plTotalPence - others;
+  }
+  plSyncInputs();
+}
+
+function plUpdateStatus() {
+  const sum  = plRows.reduce((s, r) => s + r.pence, 0);
+  const diff = plTotalPence - sum;
+  const el   = document.getElementById('plStatus');
+  const btn  = document.getElementById('plConfirmBtn');
+  let msg, ok = false;
+  if (diff > 0)       msg = fmt(diff / 100)  + ' still to allocate';
+  else if (diff < 0)  msg = fmt(-diff / 100) + ' over the total';
+  else if (plRows.some(r => r.pence <= 0 || !r.date)) msg = 'Each payment needs a date and an amount above £0';
+  else { msg = 'Adds up to ' + fmt(plTotalPence / 100) + ' ✓'; ok = true; }
+  el.textContent = msg;
+  el.className   = 'pl-status ' + (ok ? 'ok' : 'bad');
+  btn.disabled   = !ok;
 }
 
 function openPlSheet(amount) {
-  plAmount      = amount;
-  plInstalments = 3;
+  plTotalPence   = Math.round(amount * 100);
+  plInstalments  = 3;
   plIntervalType = 'monthly';
   plDesc = toTitleCase(document.getElementById('descInput').value.trim() || '—');
-  document.getElementById('plTotalDisplay').textContent = fmt(amount);
+  document.getElementById('plTotalDisplay').textContent = fmt(plTotalPence / 100);
   document.getElementById('plInstCount').textContent    = plInstalments;
   document.getElementById('plBtnMonthly').classList.add('active');
   document.getElementById('plBtn30d').classList.remove('active');
-  plRenderInstalments();
+  plBuildRows(plLocalToday());
+  plRenderRows();
   document.getElementById('plOverlay').classList.add('open');
 }
 
@@ -1664,36 +1749,47 @@ function plOverlayClick(e) {
 }
 
 function plAdjustInstalments(delta) {
-  plInstalments = Math.max(2, Math.min(12, plInstalments + delta));
+  const next = Math.max(2, Math.min(12, plInstalments + delta));
+  if (next === plInstalments) return;
+  plInstalments = next;
   document.getElementById('plInstCount').textContent = plInstalments;
-  plRenderInstalments();
+  plBuildRows(plRows.length ? plRows[0].date : plLocalToday()); // keeps the first date you chose
+  plRenderRows();
 }
 
 function plSetInterval(type) {
   plIntervalType = type;
   document.getElementById('plBtnMonthly').classList.toggle('active', type === 'monthly');
   document.getElementById('plBtn30d').classList.toggle('active',     type === '30d');
-  plRenderInstalments();
+  plBuildRows(plRows.length ? plRows[0].date : plLocalToday());
+  plRenderRows();
+}
+
+function plResetDefaults() {
+  plBuildRows(plLocalToday());
+  plRenderRows();
 }
 
 async function confirmPayLater() {
+  const sum = plRows.reduce((s, r) => s + r.pence, 0);
+  if (sum !== plTotalPence || plRows.some(r => r.pence <= 0 || !r.date)) return; // button is disabled here too
   closePlSheet();
-  const dates   = plCalcDates();
-  const amounts = plCalcAmounts(plAmount, plInstalments);
-  const now     = new Date();
-  const time    = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const rows  = plRows.map(r => ({ date: r.date, amount: r.pence / 100 }));
+  const total = plTotalPence / 100;
+  const now   = new Date();
+  const time  = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   // Log the transaction itself (shows in today's list)
   const tx = {
     id:              Date.now().toString(),
-    amount:          plAmount,
+    amount:          total,
     desc:            plDesc,
     cat:             'payLater',
     date:            todayKey(),
     time,
-    plInstalments,
+    plInstalments:   rows.length,
     plIntervalType,
-    plTotal:         plAmount
+    plTotal:         total
   };
   transactions.unshift(tx);
   render();
@@ -1708,15 +1804,16 @@ async function confirmPayLater() {
     await writeTransaction(tx);
 
     // Write all scheduled_payments records in parallel
-    const writes = dates.map((date, i) => {
+    const writes = rows.map((r, i) => {
       const key = 'sp_' + Date.now() + '_' + i;
       return db.ref('scheduled_payments/' + key).set({
+        id:           key,   // Make's "mark as written" step builds its URL from this
         desc:         plDesc,
-        totalAmount:  plAmount,
-        amount:       amounts[i],
-        date:         dateKey(date),
+        totalAmount:  total,
+        amount:       r.amount,
+        date:         r.date,
         instalment:   i + 1,
-        instalments:  plInstalments,
+        instalments:  rows.length,
         intervalType: plIntervalType,
         txId:         tx.id,
         written:      false,
